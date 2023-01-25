@@ -1,0 +1,18 @@
+[package]
+name = "postcard-infomem"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rustc_version = "0.4.0"
+semver = "1.0.16"
+serde = { version = "1.0.152", default-features = false }
+time = { version = "0.3.17", default-features = false, features = [ "formatting", "parsing", "serde" ] }
+
+[dev-dependencies]
+git-version = "0.3.5"
+postcard = { version = "1.0.2", features = [ "alloc" ] }
+rustc_version = "0.4.0"
+time = { version = "0.3.17", default-features = false, features = [ "local-offset", "serde" ] }
