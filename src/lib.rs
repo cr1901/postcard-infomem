@@ -7,10 +7,10 @@ use rustc_version::Channel;
 use semver;
 use serde::{
     de::{self, SeqAccess, Visitor},
-    ser::{self, SerializeStruct},
+    ser::SerializeStruct,
     Deserialize, Serialize,
 };
-use time::{format_description, OffsetDateTime};
+use time::OffsetDateTime;
 
 #[derive(Debug, PartialEq)]
 pub struct InfoMem {
@@ -139,24 +139,9 @@ impl<'de> Visitor<'de> for UserInfoVisitor {
         let git = seq
             .next_element()?
             .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-        let build_date_str = seq
+        let build_date = seq
             .next_element()?
             .ok_or_else(|| de::Error::invalid_length(2, &self))?;
-        let build_date: Option<OffsetDateTime> = if let Some(s) = build_date_str {
-            let format = format_description::parse(
-                "[year]-[month]-[day] [hour]:[minute]:[second] [offset_hour \
-                     sign:mandatory]:[offset_minute]:[offset_second]",
-            )
-            .unwrap();
-
-            Some(
-                OffsetDateTime::parse(s, &format)
-                    .map_err(|_| de::Error::invalid_value(serde::de::Unexpected::Str(s), &self))?,
-            )
-        } else {
-            None
-        };
-
         Ok(UserInfo {
             version,
             git,
@@ -186,19 +171,7 @@ impl Serialize for UserInfo {
         let mut state = serializer.serialize_struct("InfoMem", 3)?;
         state.serialize_field("version", &self.version.as_ref().map(|v| v.to_string()))?;
         state.serialize_field("git", &self.git)?;
-
-        let format = format_description::parse(
-            "[year]-[month]-[day] [hour]:[minute]:[second] [offset_hour \
-                 sign:mandatory]:[offset_minute]:[offset_second]",
-        )
-        .unwrap();
-
-        let build_date = match &self.build_date {
-            Some(d) => Some(d.format(&format).map_err(|e| ser::Error::custom(e))?),
-            None => None,
-        };
-
-        state.serialize_field("build_date", &build_date)?;
+        state.serialize_field("build_date", &self.build_date)?;
 
         state.end()
     }
@@ -268,14 +241,14 @@ impl<'de> Visitor<'de> for RustcInfoVisitor {
             .next_element()?
             .ok_or_else(|| de::Error::invalid_length(2, &self))?
         {
-            "dev" => Some(Channel::Dev),
-            "nightly" => Some(Channel::Nightly),
-            "beta" => Some(Channel::Beta),
-            "stable" => Some(Channel::Stable),
-            "unknown" => None,
-            s => {
+            Some(0u8) => Some(Channel::Dev),
+            Some(1) => Some(Channel::Nightly),
+            Some(2) => Some(Channel::Beta),
+            Some(3) => Some(Channel::Stable),
+            None => None,
+            Some(u) => {
                 return Err(de::Error::invalid_value(
-                    serde::de::Unexpected::Str(s),
+                    serde::de::Unexpected::Unsigned(u.into()),
                     &self,
                 ))
             }
@@ -324,13 +297,13 @@ impl Serialize for RustcInfo {
         )?;
 
         let ch_str = match self.channel {
-            Some(Channel::Dev) => "dev",
-            Some(Channel::Nightly) => "nightly",
-            Some(Channel::Beta) => "beta",
-            Some(Channel::Stable) => "stable",
-            None => "unknown",
+            Some(Channel::Dev) => Some(0u8),
+            Some(Channel::Nightly) => Some(1),
+            Some(Channel::Beta) => Some(2),
+            Some(Channel::Stable) => Some(3),
+            None => None,
         };
-        state.serialize_field("channel", ch_str)?;
+        state.serialize_field("channel", &ch_str)?;
 
         state.serialize_field("git", &self.git)?;
         state.serialize_field("host", &self.host)?;
@@ -348,7 +321,7 @@ mod tests {
     use time::OffsetDateTime;
 
     extern crate std;
-    use std::string::ToString;
+    use std::string::{String, ToString};
     use std::print;
 
     #[test]
@@ -363,6 +336,12 @@ mod tests {
 
     #[test]
     fn round_trip_filled() {
+        fn extract_short_git_string(s: String) -> Option<String> {
+            let short_git_begin = s.find('(')?;
+            let short_git_end = s[short_git_begin..].find(' ')?;
+            Some(s[short_git_begin..short_git_begin+short_git_end].to_string())
+        }
+
         let mut im = InfoMem::default();
 
         // CARGO_PKG_VERSION hardcoded while compiling this crate.
@@ -371,15 +350,15 @@ mod tests {
         // CARGO_PKG_VERSION comes from the parent.
         im.user.version =
             Some(semver::Version::parse(&std::env::var("CARGO_PKG_VERSION").unwrap()).unwrap());
-        im.user.git = Some(git_version!(fallback = "unknown").to_string());
-        im.user.build_date = Some(OffsetDateTime::now_local().unwrap().replace_millisecond(0).unwrap());
+        im.user.git = Some(git_version!(args = ["--always", "--dirty"], fallback = "unknown").to_string());
+        im.user.build_date = Some(OffsetDateTime::now_local().unwrap());
 
         if let Ok(rv) = version_meta() {
             im.rustc.version = Some(rv.semver);
             im.rustc.llvm_version = rv
                 .llvm_version
                 .map(|l| semver::Version::new(l.major, l.minor, 0));
-            im.rustc.git = rv.commit_hash;
+            im.rustc.git = extract_short_git_string(rv.short_version_string);
             im.rustc.host = Some(rv.host);
             im.rustc.channel = Some(rv.channel);
         }
