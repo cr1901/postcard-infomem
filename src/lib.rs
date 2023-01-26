@@ -1,9 +1,13 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
-
 use alloc::string::{String, ToString};
+
+#[cfg(feature = "std" )]
+use git_version::git_version;
 use rustc_version::Channel;
+#[cfg(feature = "std" )]
+use rustc_version::version_meta;
 use semver;
 use serde::{
     de::{self, SeqAccess, Visitor},
@@ -17,6 +21,44 @@ pub struct InfoMem {
     pub version: Option<semver::Version>,
     pub user: UserInfo,
     pub rustc: RustcInfo,
+}
+
+impl InfoMem {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[cfg(feature = "std")]
+    pub fn from_env() -> Self {
+        fn extract_short_git_string(s: String) -> Option<String> {
+            let short_git_begin = s.find('(')? + 1;
+            let short_git_end = s[short_git_begin..].find(' ')?;
+            Some(s[short_git_begin..short_git_begin+short_git_end].to_string())
+        }
+
+        let mut im = InfoMem::default();
+
+        // CARGO_PKG_VERSION hardcoded while compiling this crate.
+        im.version = Some(semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap());
+
+        // CARGO_PKG_VERSION comes from the parent.
+        im.user.version =
+            Some(semver::Version::parse(&std::env::var("CARGO_PKG_VERSION").unwrap()).unwrap());
+        im.user.git = Some(git_version!(args = ["--always", "--dirty"], fallback = "unknown").to_string());
+        im.user.build_date = Some(OffsetDateTime::now_local().unwrap());
+
+        if let Ok(rv) = version_meta() {
+            im.rustc.version = Some(rv.semver);
+            im.rustc.llvm_version = rv
+                .llvm_version
+                .map(|l| semver::Version::new(l.major, l.minor, 0));
+            im.rustc.git = extract_short_git_string(rv.short_version_string);
+            im.rustc.host = Some(rv.host);
+            im.rustc.channel = Some(rv.channel);
+        }
+
+        im
+    }
 }
 
 impl Default for InfoMem {
@@ -168,7 +210,7 @@ impl Serialize for UserInfo {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("InfoMem", 3)?;
+        let mut state = serializer.serialize_struct("UserInfo", 3)?;
         state.serialize_field("version", &self.version.as_ref().map(|v| v.to_string()))?;
         state.serialize_field("git", &self.git)?;
         state.serialize_field("build_date", &self.build_date)?;
@@ -289,7 +331,7 @@ impl Serialize for RustcInfo {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("InfoMem", 3)?;
+        let mut state = serializer.serialize_struct("RustcInfo", 3)?;
         state.serialize_field("version", &self.version.as_ref().map(|v| v.to_string()))?;
         state.serialize_field(
             "llvm_version",
@@ -315,13 +357,9 @@ impl Serialize for RustcInfo {
 #[cfg(test)]
 mod tests {
     use crate::InfoMem;
-    use git_version::git_version;
     use postcard::{from_bytes, to_allocvec};
-    use rustc_version::version_meta;
-    use time::OffsetDateTime;
 
-    extern crate std;
-    use std::string::{String, ToString};
+    #[cfg(feature = "std")]
     use std::print;
 
     #[test]
@@ -334,34 +372,10 @@ mod tests {
         assert_eq!(im, de);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn round_trip_filled() {
-        fn extract_short_git_string(s: String) -> Option<String> {
-            let short_git_begin = s.find('(')?;
-            let short_git_end = s[short_git_begin..].find(' ')?;
-            Some(s[short_git_begin..short_git_begin+short_git_end].to_string())
-        }
-
-        let mut im = InfoMem::default();
-
-        // CARGO_PKG_VERSION hardcoded while compiling this crate.
-        im.version = Some(semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap());
-
-        // CARGO_PKG_VERSION comes from the parent.
-        im.user.version =
-            Some(semver::Version::parse(&std::env::var("CARGO_PKG_VERSION").unwrap()).unwrap());
-        im.user.git = Some(git_version!(args = ["--always", "--dirty"], fallback = "unknown").to_string());
-        im.user.build_date = Some(OffsetDateTime::now_local().unwrap());
-
-        if let Ok(rv) = version_meta() {
-            im.rustc.version = Some(rv.semver);
-            im.rustc.llvm_version = rv
-                .llvm_version
-                .map(|l| semver::Version::new(l.major, l.minor, 0));
-            im.rustc.git = extract_short_git_string(rv.short_version_string);
-            im.rustc.host = Some(rv.host);
-            im.rustc.channel = Some(rv.channel);
-        }
+        let im = InfoMem::from_env();
 
         let ser = to_allocvec(&im).unwrap();
         ser.iter().for_each(|b| {
