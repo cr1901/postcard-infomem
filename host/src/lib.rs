@@ -30,7 +30,7 @@ pub fn generate_from_env() -> Result<InfoMem, Box<dyn Error>> {
     
     // Similar in spirit to https://github.com/fusion-engineering/rust-git-version,
     // except done at runtime of a build-script, not compile-time of a crate.
-    im.user.git = match Command::new("git").args(["describe", "--always", "--dirty"]).output() {
+    im.user.git = match Command::new("git").args(["describe", "--always", "--dirty", "--tags"]).output() {
         Ok(o) if o.status.success() => Some(String::from_utf8(o.stdout).unwrap_or("unknown".to_string())),
         _ => Some("unknown".to_string()),
     };
