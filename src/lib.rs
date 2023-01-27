@@ -1,18 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 
 use rustc_version::Channel;
 use semver;
-use serde::{
-    de::{self, SeqAccess, Visitor},
-    ser::SerializeStruct,
-    Deserialize, Serialize,
-};
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct InfoMem {
     pub version: Option<semver::Version>,
     pub user: UserInfo,
@@ -35,70 +31,7 @@ impl Default for InfoMem {
     }
 }
 
-struct InfoMemVisitor;
-
-impl<'de> Visitor<'de> for InfoMemVisitor {
-    type Value = InfoMem;
-
-    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
-        formatter.write_str("struct InfoMem")
-    }
-
-    fn visit_seq<V>(self, mut seq: V) -> Result<InfoMem, V::Error>
-    where
-        V: SeqAccess<'de>,
-    {
-        let version_str: Option<&str> = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-        let version: Option<semver::Version> = if let Some(s) = version_str {
-            Some(
-                semver::Version::parse(s)
-                    .map_err(|_| de::Error::invalid_value(serde::de::Unexpected::Str(s), &self))?,
-            )
-        } else {
-            None
-        };
-
-        let user = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-        let rustc = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(2, &self))?;
-
-        Ok(InfoMem {
-            version,
-            user,
-            rustc,
-        })
-    }
-}
-
-impl<'de> Deserialize<'de> for InfoMem {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_struct("InfoMem", &["version", "user", "rustc"], InfoMemVisitor)
-    }
-}
-
-impl Serialize for InfoMem {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("InfoMem", 3)?;
-        state.serialize_field("version", &self.version.as_ref().map(|v| v.to_string()))?;
-        state.serialize_field("user", &self.user)?;
-        state.serialize_field("rustc", &self.rustc)?;
-
-        state.end()
-    }
-}
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct UserInfo {
     pub version: Option<semver::Version>,
     pub git: Option<String>,
@@ -117,76 +50,73 @@ impl Default for UserInfo {
     }
 }
 
-struct UserInfoVisitor;
+// Helper types to ease the serialization process
+mod shim {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-impl<'de> Visitor<'de> for UserInfoVisitor {
-    type Value = UserInfo;
-
-    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
-        formatter.write_str("struct UserInfo")
+    #[derive(Serialize, Deserialize)]
+    pub enum Channel {
+        /// Development release channel
+        Dev,
+        /// Nightly release channel
+        Nightly,
+        /// Beta release channel
+        Beta,
+        /// Stable release channel
+        Stable,
     }
 
-    fn visit_seq<V>(self, mut seq: V) -> Result<UserInfo, V::Error>
-    where
-        V: SeqAccess<'de>,
-    {
-        let version_str: Option<&str> = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-        let version: Option<semver::Version> = if let Some(s) = version_str {
-            Some(
-                semver::Version::parse(s)
-                    .map_err(|_| de::Error::invalid_value(serde::de::Unexpected::Str(s), &self))?,
-            )
-        } else {
-            None
-        };
-
-        let git = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-        let build_date = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(2, &self))?;
-        Ok(UserInfo {
-            version,
-            git,
-            build_date,
-        })
+    impl From<rustc_version::Channel> for Channel {
+        #[inline]
+        fn from(other: rustc_version::Channel) -> Self {
+            match other {
+                rustc_version::Channel::Dev => Channel::Dev,
+                rustc_version::Channel::Nightly => Channel::Nightly,
+                rustc_version::Channel::Beta => Channel::Beta,
+                rustc_version::Channel::Stable => Channel::Stable,
+            }
+        }
     }
-}
 
-impl<'de> Deserialize<'de> for UserInfo {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_struct(
-            "UserInfo",
-            &["version", "git", "build_date"],
-            UserInfoVisitor,
-        )
+    impl Into<rustc_version::Channel> for Channel {
+        #[inline]
+        fn into(self) -> rustc_version::Channel {
+            match self {
+                Channel::Dev => rustc_version::Channel::Dev,
+                Channel::Nightly => rustc_version::Channel::Nightly,
+                Channel::Beta => rustc_version::Channel::Beta,
+                Channel::Stable => rustc_version::Channel::Stable,
+            }
+        }
     }
-}
 
-impl Serialize for UserInfo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("UserInfo", 3)?;
-        state.serialize_field("version", &self.version.as_ref().map(|v| v.to_string()))?;
-        state.serialize_field("git", &self.git)?;
-        state.serialize_field("build_date", &self.build_date)?;
+    pub mod channel_shim {
+        use super::*;
 
-        state.end()
+        pub fn deserialize<'de, D>(d: D) -> Result<Option<rustc_version::Channel>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            let foreign = <Option<Channel>>::deserialize(d)?;
+            Ok(foreign.map(Into::into))
+        }
+
+        pub fn serialize<S>(c: &Option<rustc_version::Channel>, s: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let c = *c;
+            c.map(<Channel as From<rustc_version::Channel>>::from)
+                .serialize(s)
+        }
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct RustcInfo {
     pub version: Option<semver::Version>,
     pub llvm_version: Option<semver::Version>,
+    #[serde(with = "shim::channel_shim")]
     pub channel: Option<Channel>,
     pub git: Option<String>,
     pub host: Option<String>,
@@ -203,118 +133,6 @@ impl Default for RustcInfo {
             git: Default::default(),
             host: Default::default(),
         }
-    }
-}
-
-struct RustcInfoVisitor;
-
-impl<'de> Visitor<'de> for RustcInfoVisitor {
-    type Value = RustcInfo;
-
-    fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
-        formatter.write_str("struct RustcInfo")
-    }
-
-    fn visit_seq<V>(self, mut seq: V) -> Result<RustcInfo, V::Error>
-    where
-        V: SeqAccess<'de>,
-    {
-        let version_str: Option<&str> = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-        let version: Option<semver::Version> = if let Some(s) = version_str {
-            Some(
-                semver::Version::parse(s)
-                    .map_err(|_| de::Error::invalid_value(serde::de::Unexpected::Str(s), &self))?,
-            )
-        } else {
-            None
-        };
-
-        let version_str: Option<&str> = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-        let llvm_version: Option<semver::Version> = if let Some(s) = version_str {
-            Some(
-                semver::Version::parse(s)
-                    .map_err(|_| de::Error::invalid_value(serde::de::Unexpected::Str(s), &self))?,
-            )
-        } else {
-            None
-        };
-
-        let channel = match seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(2, &self))?
-        {
-            Some(0u8) => Some(Channel::Dev),
-            Some(1) => Some(Channel::Nightly),
-            Some(2) => Some(Channel::Beta),
-            Some(3) => Some(Channel::Stable),
-            None => None,
-            Some(u) => {
-                return Err(de::Error::invalid_value(
-                    serde::de::Unexpected::Unsigned(u.into()),
-                    &self,
-                ))
-            }
-        };
-
-        let git = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(3, &self))?;
-        let host = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(4, &self))?;
-
-        Ok(RustcInfo {
-            version,
-            llvm_version,
-            channel,
-            git,
-            host,
-        })
-    }
-}
-
-impl<'de> Deserialize<'de> for RustcInfo {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_struct(
-            "RustcInfo",
-            &["version", "llvm_version", "channel", "git", "host"],
-            RustcInfoVisitor,
-        )
-    }
-}
-
-impl Serialize for RustcInfo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut state = serializer.serialize_struct("RustcInfo", 3)?;
-        state.serialize_field("version", &self.version.as_ref().map(|v| v.to_string()))?;
-        state.serialize_field(
-            "llvm_version",
-            &self.llvm_version.as_ref().map(|v| v.to_string()),
-        )?;
-
-        let ch_str = match self.channel {
-            Some(Channel::Dev) => Some(0u8),
-            Some(Channel::Nightly) => Some(1),
-            Some(Channel::Beta) => Some(2),
-            Some(Channel::Stable) => Some(3),
-            None => None,
-        };
-        state.serialize_field("channel", &ch_str)?;
-
-        state.serialize_field("git", &self.git)?;
-        state.serialize_field("host", &self.host)?;
-
-        state.end()
     }
 }
 
