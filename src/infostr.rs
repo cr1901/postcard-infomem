@@ -9,9 +9,14 @@
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 
+#[cfg(all(not(feature = "std"), feature = "alloc"))]
+extern crate alloc;
+#[cfg(all(not(feature = "std"), feature = "alloc"))]
+use alloc::string::{String, ToString};
+
 pub enum InfoStr<'a> {
     Borrowed(&'a str),
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", feature = "alloc"))]
     Owned(String),
 }
 
@@ -22,7 +27,7 @@ impl<'a> InfoStr<'a> {
     }
 
     /// Create an InfoStr from an owned String
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", feature = "alloc"))]
     pub fn from_string(stir: String) -> InfoStr<'static> {
         InfoStr::Owned(stir)
     }
@@ -31,7 +36,7 @@ impl<'a> InfoStr<'a> {
     pub fn as_str(&'a self) -> &'a str {
         match self {
             InfoStr::Borrowed(s) => s,
-            #[cfg(feature = "std")]
+            #[cfg(any(feature = "std", feature = "alloc"))]
             InfoStr::Owned(s) => s.as_str(),
         }
     }
@@ -39,14 +44,14 @@ impl<'a> InfoStr<'a> {
 
 // Optional impls
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "alloc"))]
 impl From<String> for InfoStr<'static> {
     fn from(stir: String) -> Self {
         InfoStr::Owned(stir)
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "alloc"))]
 impl From<InfoStr<'static>> for String {
     fn from(is: InfoStr<'static>) -> Self {
         match is {

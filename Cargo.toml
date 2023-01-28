@@ -15,7 +15,8 @@ time = { version = "0.3.17", default-features = false, features = [ "serde" ] }
 postcard = { version = "1.0.2", default-features = false, features = [ "alloc" ] }
 
 [features]
-std = []
+std = [ "alloc" ]
+alloc = []
 
 [workspace]
 members = [ "device", "host" ]
