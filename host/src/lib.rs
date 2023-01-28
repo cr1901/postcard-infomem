@@ -5,9 +5,9 @@ use std::path::Path;
 use std::process::Command;
 
 use postcard::to_stdvec;
-use postcard_infomem::{InfoMem, InfoStr};
+use postcard_infomem::InfoMem;
 use rustc_version::version_meta;
-use semver;
+use semver::Version;
 use time::OffsetDateTime;
 
 // The short string will be fine. rustc_version is supposed to support
@@ -22,22 +22,22 @@ pub fn generate_from_env() -> Result<InfoMem<'static>, Box<dyn Error>> {
     let mut im = InfoMem::default();
 
     // CARGO_PKG_VERSION hardcoded while compiling this crate.
-    im.version = Some(semver::Version::parse(env!("CARGO_PKG_VERSION"))?);
+    im.version = Some(Version::parse(env!("CARGO_PKG_VERSION"))?);
 
     // CARGO_PKG_VERSION comes from whatever is running this build script.
     im.user.version =
-        Some(semver::Version::parse(&std::env::var("CARGO_PKG_VERSION")?)?);
+        Some(Version::parse(&std::env::var("CARGO_PKG_VERSION")?)?);
     
     // Similar in spirit to https://github.com/fusion-engineering/rust-git-version,
     // except done at runtime of a build-script, not compile-time of a crate.
     im.user.git = match Command::new("git").args(["describe", "--always", "--dirty", "--tags"]).output() {
         Ok(o) if o.status.success() => {
             Some(match String::from_utf8(o.stdout) {
-                Ok(s) => InfoStr::from_string(s),
-                Err(_) => InfoStr::from_borrowed("unknown"),
+                Ok(s) => s.into(),
+                Err(_) => "unknown".into(),
             })
         },
-        _ => Some(InfoStr::from_borrowed("unknown")),
+        _ => Some("unknown".into()),
     };
 
     im.user.build_date = Some(OffsetDateTime::now_local()?);
@@ -46,9 +46,9 @@ pub fn generate_from_env() -> Result<InfoMem<'static>, Box<dyn Error>> {
         im.rustc.version = Some(rv.semver);
         im.rustc.llvm_version = rv
             .llvm_version
-            .map(|l| semver::Version::new(l.major, l.minor, 0));
-        im.rustc.git = extract_short_git_string(rv.short_version_string).map(InfoStr::from_string);
-        im.rustc.host = Some(InfoStr::from_string(rv.host));
+            .map(|l| Version::new(l.major, l.minor, 0));
+        im.rustc.git = extract_short_git_string(rv.short_version_string).map(Into::into);
+        im.rustc.host = Some(rv.host.into());
         im.rustc.channel = Some(rv.channel);
     }
 

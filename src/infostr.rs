@@ -37,7 +37,38 @@ impl<'a> InfoStr<'a> {
     }
 }
 
+// Optional impls
+
+#[cfg(feature = "std")]
+impl From<String> for InfoStr<'static> {
+    fn from(stir: String) -> Self {
+        InfoStr::Owned(stir)
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<InfoStr<'static>> for String {
+    fn from(is: InfoStr<'static>) -> Self {
+        match is {
+            InfoStr::Borrowed(s) => s.to_string(),
+            InfoStr::Owned(s) => s,
+        }
+    }
+}
+
 // Implement a couple traits by passing through to &str's methods
+
+impl<'a> From<&'a str> for InfoStr<'a> {
+    fn from(stir: &'a str) -> Self {
+        InfoStr::Borrowed(stir)
+    }
+}
+
+impl<'a> From<&'a InfoStr<'a>> for &'a str {
+    fn from(is: &'a InfoStr<'a>) -> &'a str {
+        is.as_str()
+    }
+}
 
 impl<'a> PartialEq for InfoStr<'a> {
     fn eq(&self, other: &Self) -> bool {
