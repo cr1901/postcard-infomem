@@ -20,8 +20,11 @@ pub struct InfoMem<'a> {
 
 impl<'a> Default for InfoMem<'a> {
     fn default() -> Self {
-        InfoMem { 
-            version: Version::new(0, 0, 0),
+        InfoMem {
+            // This will panic at compile time. If CARGO_PKG_VERSION fails to
+            // parse at runtime (note that Version::parse is a const fn, and
+            // the unwrap should be infallible), we have much bigger problems.
+            version: Version::parse(env!("CARGO_PKG_VERSION")).unwrap(),
             user: Default::default(),
             rustc: Default::default()
         }
@@ -45,7 +48,7 @@ pub struct UserInfo<'a> {
 impl<'a> Default for UserInfo<'a> {
     fn default() -> Self {
         Self {
-            version: Version::parse(env!("CARGO_PKG_VERSION")).ok(),
+            version: None,
             git: Default::default(),
             build_date: Default::default(),
         }
@@ -128,7 +131,7 @@ pub struct RustcInfo<'a> {
 impl<'a> Default for RustcInfo<'a> {
     fn default() -> Self {
         Self {
-            version: Version::parse(env!("CARGO_PKG_VERSION")).ok(),
+            version: None,
             llvm_version: None,
             channel: None,
             git: Default::default(),
