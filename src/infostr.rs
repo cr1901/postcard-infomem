@@ -16,7 +16,7 @@ use alloc::string::{String, ToString};
 
 pub enum InfoStr<'a> {
     Borrowed(&'a str),
-    #[cfg(any(feature = "std", feature = "alloc"))]
+    #[cfg(feature = "alloc")]
     Owned(String),
 }
 
@@ -27,7 +27,7 @@ impl<'a> InfoStr<'a> {
     }
 
     /// Create an InfoStr from an owned String
-    #[cfg(any(feature = "std", feature = "alloc"))]
+    #[cfg(feature = "alloc")]
     pub fn from_string(stir: String) -> InfoStr<'static> {
         InfoStr::Owned(stir)
     }
@@ -36,7 +36,7 @@ impl<'a> InfoStr<'a> {
     pub fn as_str(&'a self) -> &'a str {
         match self {
             InfoStr::Borrowed(s) => s,
-            #[cfg(any(feature = "std", feature = "alloc"))]
+            #[cfg(feature = "alloc")]
             InfoStr::Owned(s) => s.as_str(),
         }
     }
@@ -44,14 +44,14 @@ impl<'a> InfoStr<'a> {
 
 // Optional impls
 
-#[cfg(any(feature = "std", feature = "alloc"))]
+#[cfg(feature = "alloc")]
 impl From<String> for InfoStr<'static> {
     fn from(stir: String) -> Self {
         InfoStr::Owned(stir)
     }
 }
 
-#[cfg(any(feature = "std", feature = "alloc"))]
+#[cfg(feature = "alloc")]
 impl From<InfoStr<'static>> for String {
     fn from(is: InfoStr<'static>) -> Self {
         match is {
