@@ -22,7 +22,7 @@ pub fn generate_from_env() -> Result<InfoMem<'static>, Box<dyn Error>> {
     let mut im = InfoMem::default();
 
     // CARGO_PKG_VERSION hardcoded while compiling this crate.
-    im.version = Some(Version::parse(env!("CARGO_PKG_VERSION"))?);
+    im.version = Version::parse(env!("CARGO_PKG_VERSION"))?;
 
     // CARGO_PKG_VERSION comes from whatever is running this build script.
     im.user.version = Some(Version::parse(&std::env::var("CARGO_PKG_VERSION")?)?);

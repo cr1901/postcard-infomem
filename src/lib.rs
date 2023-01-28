@@ -10,12 +10,22 @@ use time::OffsetDateTime;
 mod infostr;
 pub use infostr::InfoStr;
 
-#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct InfoMem<'a> {
-    pub version: Option<Version>,
+    pub version: Version,
     #[serde(borrow)]
     pub user: UserInfo<'a>,
     pub rustc: RustcInfo<'a>,
+}
+
+impl<'a> Default for InfoMem<'a> {
+    fn default() -> Self {
+        InfoMem { 
+            version: Version::new(0, 0, 0),
+            user: Default::default(),
+            rustc: Default::default()
+        }
+    }
 }
 
 impl<'a> InfoMem<'a> {
