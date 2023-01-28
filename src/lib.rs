@@ -1,49 +1,41 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-extern crate alloc;
-use alloc::string::String;
+use core::fmt::Debug;
 
 use rustc_version::Channel;
-use semver;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct InfoMem {
-    pub version: Option<semver::Version>,
-    pub user: UserInfo,
-    pub rustc: RustcInfo,
+mod infostr;
+pub use infostr::InfoStr;
+
+#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct InfoMem<'a> {
+    pub version: Option<Version>,
+    #[serde(borrow)]
+    pub user: UserInfo<'a>,
+    pub rustc: RustcInfo<'a>,
 }
 
-impl InfoMem {
+impl<'a> InfoMem<'a> {
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl Default for InfoMem {
-    fn default() -> Self {
-        Self {
-            version: None,
-            user: Default::default(),
-            rustc: Default::default(),
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct UserInfo {
-    pub version: Option<semver::Version>,
-    pub git: Option<String>,
+pub struct UserInfo<'a> {
+    pub version: Option<Version>,
+    #[serde(borrow)]
+    pub git: Option<InfoStr<'a>>,
     pub build_date: Option<OffsetDateTime>,
 }
 
-impl Default for UserInfo {
+impl<'a> Default for UserInfo<'a> {
     fn default() -> Self {
         Self {
-            version: semver::Version::parse(env!("CARGO_PKG_VERSION"))
-                .map(|v| Some(v))
-                .unwrap_or(None),
+            version: Version::parse(env!("CARGO_PKG_VERSION")).ok(),
             git: Default::default(),
             build_date: Default::default(),
         }
@@ -78,10 +70,10 @@ mod shim {
         }
     }
 
-    impl Into<rustc_version::Channel> for Channel {
+    impl From<Channel> for rustc_version::Channel {
         #[inline]
-        fn into(self) -> rustc_version::Channel {
-            match self {
+        fn from(other: Channel) -> rustc_version::Channel {
+            match other {
                 Channel::Dev => rustc_version::Channel::Dev,
                 Channel::Nightly => rustc_version::Channel::Nightly,
                 Channel::Beta => rustc_version::Channel::Beta,
@@ -113,21 +105,20 @@ mod shim {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct RustcInfo {
-    pub version: Option<semver::Version>,
-    pub llvm_version: Option<semver::Version>,
+pub struct RustcInfo<'a> {
+    pub version: Option<Version>,
+    pub llvm_version: Option<Version>,
     #[serde(with = "shim::channel_shim")]
     pub channel: Option<Channel>,
-    pub git: Option<String>,
-    pub host: Option<String>,
+    #[serde(borrow)]
+    pub git: Option<InfoStr<'a>>,
+    pub host: Option<InfoStr<'a>>,
 }
 
-impl Default for RustcInfo {
+impl<'a> Default for RustcInfo<'a> {
     fn default() -> Self {
         Self {
-            version: semver::Version::parse(env!("CARGO_PKG_VERSION"))
-                .map(|v| Some(v))
-                .unwrap_or(None),
+            version: Version::parse(env!("CARGO_PKG_VERSION")).ok(),
             llvm_version: None,
             channel: None,
             git: Default::default(),
