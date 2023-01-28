@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::Command;
 
 use postcard::to_stdvec;
-use postcard_infomem::InfoMem;
+use postcard_infomem::{InfoMem, InfoStr};
 use rustc_version::version_meta;
 use semver;
 use time::OffsetDateTime;
@@ -18,7 +18,7 @@ fn extract_short_git_string(s: String) -> Option<String> {
     Some(s[short_git_begin..short_git_begin+short_git_end].to_string())
 }
 
-pub fn generate_from_env() -> Result<InfoMem, Box<dyn Error>> {
+pub fn generate_from_env() -> Result<InfoMem<'static>, Box<dyn Error>> {
     let mut im = InfoMem::default();
 
     // CARGO_PKG_VERSION hardcoded while compiling this crate.
@@ -31,8 +31,13 @@ pub fn generate_from_env() -> Result<InfoMem, Box<dyn Error>> {
     // Similar in spirit to https://github.com/fusion-engineering/rust-git-version,
     // except done at runtime of a build-script, not compile-time of a crate.
     im.user.git = match Command::new("git").args(["describe", "--always", "--dirty", "--tags"]).output() {
-        Ok(o) if o.status.success() => Some(String::from_utf8(o.stdout).unwrap_or("unknown".to_string())),
-        _ => Some("unknown".to_string()),
+        Ok(o) if o.status.success() => {
+            Some(match String::from_utf8(o.stdout) {
+                Ok(s) => InfoStr::from_string(s),
+                Err(_) => InfoStr::from_borrowed("unknown"),
+            })
+        },
+        _ => Some(InfoStr::from_borrowed("unknown")),
     };
 
     im.user.build_date = Some(OffsetDateTime::now_local()?);
@@ -42,8 +47,8 @@ pub fn generate_from_env() -> Result<InfoMem, Box<dyn Error>> {
         im.rustc.llvm_version = rv
             .llvm_version
             .map(|l| semver::Version::new(l.major, l.minor, 0));
-        im.rustc.git = extract_short_git_string(rv.short_version_string);
-        im.rustc.host = Some(rv.host);
+        im.rustc.git = extract_short_git_string(rv.short_version_string).map(InfoStr::from_string);
+        im.rustc.host = Some(InfoStr::from_string(rv.host));
         im.rustc.channel = Some(rv.channel);
     }
 

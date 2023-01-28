@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 postcard = { version = "1.0.2", default-features = false, features = [ "use-std" ] }
-postcard-infomem = { version = "0.1.0", path = ".." }
+postcard-infomem = { version = "0.1.0", path = "..", features = [ "std" ] }
 rustc_version = "0.4.0"
 semver = { version = "1.0.16", default-features = false }
 time = { version = "0.3.17", default-features = false, features = [ "local-offset" ] }
