@@ -15,7 +15,7 @@ use time::OffsetDateTime;
 fn extract_short_git_string(s: String) -> Option<String> {
     let short_git_begin = s.find('(')? + 1;
     let short_git_end = s[short_git_begin..].find(' ')?;
-    Some(s[short_git_begin..short_git_begin+short_git_end].to_string())
+    Some(s[short_git_begin..short_git_begin + short_git_end].to_string())
 }
 
 pub fn generate_from_env() -> Result<InfoMem<'static>, Box<dyn Error>> {
@@ -25,18 +25,18 @@ pub fn generate_from_env() -> Result<InfoMem<'static>, Box<dyn Error>> {
     im.version = Some(Version::parse(env!("CARGO_PKG_VERSION"))?);
 
     // CARGO_PKG_VERSION comes from whatever is running this build script.
-    im.user.version =
-        Some(Version::parse(&std::env::var("CARGO_PKG_VERSION")?)?);
-    
+    im.user.version = Some(Version::parse(&std::env::var("CARGO_PKG_VERSION")?)?);
+
     // Similar in spirit to https://github.com/fusion-engineering/rust-git-version,
     // except done at runtime of a build-script, not compile-time of a crate.
-    im.user.git = match Command::new("git").args(["describe", "--always", "--dirty", "--tags"]).output() {
-        Ok(o) if o.status.success() => {
-            Some(match String::from_utf8(o.stdout) {
-                Ok(s) => s.into(),
-                Err(_) => "unknown".into(),
-            })
-        },
+    im.user.git = match Command::new("git")
+        .args(["describe", "--always", "--dirty", "--tags"])
+        .output()
+    {
+        Ok(o) if o.status.success() => Some(match String::from_utf8(o.stdout) {
+            Ok(s) => s.into(),
+            Err(_) => "unknown".into(),
+        }),
         _ => Some("unknown".into()),
     };
 
@@ -44,9 +44,7 @@ pub fn generate_from_env() -> Result<InfoMem<'static>, Box<dyn Error>> {
 
     if let Ok(rv) = version_meta() {
         im.rustc.version = Some(rv.semver);
-        im.rustc.llvm_version = rv
-            .llvm_version
-            .map(|l| Version::new(l.major, l.minor, 0));
+        im.rustc.llvm_version = rv.llvm_version.map(|l| Version::new(l.major, l.minor, 0));
         im.rustc.git = extract_short_git_string(rv.short_version_string).map(Into::into);
         im.rustc.host = Some(rv.host.into());
         im.rustc.channel = Some(rv.channel);
@@ -55,11 +53,14 @@ pub fn generate_from_env() -> Result<InfoMem<'static>, Box<dyn Error>> {
     Ok(im)
 }
 
-pub fn write_info_to_file<P>(im: &InfoMem, path: P) -> Result<(), Box<dyn Error>> where P: AsRef<Path> {
+pub fn write_info_to_file<P>(im: &InfoMem, path: P) -> Result<(), Box<dyn Error>>
+where
+    P: AsRef<Path>,
+{
     let mut fp = File::create(path)?;
     let buf = to_stdvec(&im)?;
     fp.write_all(&buf)?;
-    
+
     Ok(())
 }
 
@@ -78,6 +79,23 @@ mod tests {
         });
         let de = from_bytes(&ser).unwrap();
 
+        assert_eq!(im, de);
+    }
+
+    #[test]
+    fn round_trip_borrowed() {
+        let im = generate_from_env().unwrap();
+
+        let ser = to_stdvec(&im).unwrap();
+        ser.iter().for_each(|b| {
+            print!("{:02X} ", b);
+        });
+
+        fn borrow<'a>(stir: &'a [u8]) -> InfoMem<'a> {
+            from_bytes(stir).unwrap()
+        }
+
+        let de = borrow(&ser);
         assert_eq!(im, de);
     }
 }
