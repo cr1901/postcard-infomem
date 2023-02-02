@@ -1,10 +1,23 @@
-use super::infostr::InfoStr;
-use core::ops::IndexMut;
+#[cfg(feature = "alloc")]
+pub use ser::to_allocvec_magic;
+
+#[cfg(feature = "std")]
+pub use ser::to_allocvec_magic as to_stdvec_magic;
 
 pub mod ser {
-    use super::*;
+    use core::ops::IndexMut;
+    use crate::*;
     use postcard::ser_flavors::Flavor;
-    use postcard::{Error, Result};
+    use postcard::{Error, Result, serialize_with_flavor};
+
+    #[cfg(feature = "alloc")]
+    use postcard::ser_flavors::AllocVec;
+
+    #[cfg(feature = "alloc")]
+    pub fn to_allocvec_magic(value: &InfoMem) -> Result<Vec<u8>> {
+        let magic = Magic::try_new(AllocVec::default())?;
+        serialize_with_flavor(&value, magic)
+    }
 
     pub struct Magic<B>(B)
     where
@@ -47,9 +60,8 @@ pub mod ser {
 pub mod de {
     use core::marker::PhantomData;
 
-    use super::*;
     use postcard::de_flavors::Flavor;
-    use postcard::{Error, Result};
+    use postcard::Result;
 
     #[derive(PartialEq)]
     enum State {

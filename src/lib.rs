@@ -11,8 +11,7 @@ mod infostr;
 pub use infostr::InfoStr;
 
 mod magic;
-pub use magic::ser;
-pub use magic::de;
+pub use magic::*;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct InfoMem<'a> {

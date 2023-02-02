@@ -4,8 +4,8 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-use postcard::to_stdvec;
-use postcard_infomem::InfoMem;
+use postcard::{to_stdvec, serialize_with_flavor};
+use postcard_infomem::{InfoMem, to_stdvec_magic};
 use rustc_version::version_meta;
 use semver::Version;
 use time::OffsetDateTime;
@@ -18,7 +18,9 @@ fn extract_short_git_string(s: String) -> Option<String> {
     Some(s[short_git_begin..short_git_begin + short_git_end].to_string())
 }
 
-pub fn generate_from_env() -> Result<InfoMem<'static>, Box<dyn Error>> {
+
+
+pub fn generate_from_env<'a>() -> Result<InfoMem<'a>, Box<dyn Error>> {
     let mut im = InfoMem::default();
 
     // CARGO_PKG_VERSION hardcoded while compiling this crate.
@@ -54,14 +56,38 @@ pub fn generate_from_env() -> Result<InfoMem<'static>, Box<dyn Error>> {
     Ok(im)
 }
 
-pub fn write_info_to_file<P>(im: &InfoMem, path: P) -> Result<(), Box<dyn Error>>
+pub struct WriterConfig {
+    header: bool
+}
+
+impl WriterConfig {
+    pub fn set_header(mut self, op: bool) -> Self {
+        self.header = op;
+        self
+    }
+}
+
+impl Default for WriterConfig {
+    fn default() -> Self {
+        Self {
+            header: true
+        }
+    }
+}
+
+pub fn write_info_to_file<P>(im: &InfoMem, path: P, cfg: WriterConfig) -> Result<(), Box<dyn Error>>
 where
     P: AsRef<Path>,
 {
     let mut fp = File::create(path)?;
-    let buf = to_stdvec(&im)?;
-    fp.write_all(&buf)?;
 
+    let buf = if cfg.header {
+        to_stdvec_magic(&im)?
+    } else {
+        to_stdvec(&im)?
+    };
+     
+    fp.write_all(&buf)?;
     Ok(())
 }
 
