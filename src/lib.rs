@@ -10,6 +10,9 @@ use time::OffsetDateTime;
 mod infostr;
 pub use infostr::InfoStr;
 
+mod magic;
+pub use magic::ser;
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct InfoMem<'a> {
     pub version: Version,
