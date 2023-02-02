@@ -12,6 +12,7 @@ pub use infostr::InfoStr;
 
 mod magic;
 pub use magic::ser;
+pub use magic::de;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct InfoMem<'a> {
@@ -42,6 +43,7 @@ impl<'a> InfoMem<'a> {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct UserInfo<'a> {
+    pub name: Option<InfoStr<'a>>,
     pub version: Option<Version>,
     #[serde(borrow)]
     pub git: Option<InfoStr<'a>>,
@@ -51,6 +53,7 @@ pub struct UserInfo<'a> {
 impl<'a> Default for UserInfo<'a> {
     fn default() -> Self {
         Self {
+            name: None,
             version: None,
             git: Default::default(),
             build_date: Default::default(),

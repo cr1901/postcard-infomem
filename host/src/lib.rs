@@ -24,6 +24,7 @@ pub fn generate_from_env() -> Result<InfoMem<'static>, Box<dyn Error>> {
     // CARGO_PKG_VERSION hardcoded while compiling this crate.
     im.version = Version::parse(env!("CARGO_PKG_VERSION"))?;
 
+    im.user.name = Some(env!("CARGO_PKG_NAME").into());
     // CARGO_PKG_VERSION comes from whatever is running this build script.
     im.user.version = Some(Version::parse(&std::env::var("CARGO_PKG_VERSION")?)?);
 
