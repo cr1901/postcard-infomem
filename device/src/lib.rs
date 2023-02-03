@@ -20,7 +20,7 @@ macro_rules! include_postcard_infomem {
         static $var_name: [u8; INFOMEM_LEN] = {
             let mut arr = [0; INFOMEM_LEN];
             let mut idx = 0;
-            
+
             while idx < INFOMEM_LEN {
                 arr[idx] = INFOMEM_REF[idx];
                 idx += 1;
@@ -31,8 +31,5 @@ macro_rules! include_postcard_infomem {
     };
 }
 
-
 #[cfg(test)]
-mod tests {
-
-}
+mod tests {}

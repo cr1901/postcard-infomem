@@ -29,7 +29,7 @@ impl<'a> Default for InfoMem<'a> {
             // the unwrap should be infallible), we have much bigger problems.
             version: Version::parse(env!("CARGO_PKG_VERSION")).unwrap(),
             user: Default::default(),
-            rustc: Default::default()
+            rustc: Default::default(),
         }
     }
 }

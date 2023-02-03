@@ -7,10 +7,10 @@ pub use ser::to_allocvec_magic;
 pub use ser::to_allocvec_magic as to_stdvec_magic;
 
 pub mod ser {
-    use core::ops::IndexMut;
     use crate::*;
+    use core::ops::IndexMut;
     use postcard::ser_flavors::{Flavor, Slice};
-    use postcard::{Error, Result, serialize_with_flavor};
+    use postcard::{serialize_with_flavor, Error, Result};
 
     #[cfg(feature = "alloc")]
     use postcard::ser_flavors::AllocVec;
@@ -112,7 +112,7 @@ pub mod de {
                 let byte = self.flav.pop()?;
 
                 match self.state {
-                    State::Idle => {},
+                    State::Idle => {}
                     State::SawNone if byte == b'P' => self.state = State::SawP,
                     State::SawP if byte == b'I' => self.state = State::SawI,
                     State::SawI if byte == b'M' => self.state = State::SawM,
@@ -152,7 +152,7 @@ pub mod de {
 #[cfg(test)]
 mod tests {
     use crate::de::from_bytes_magic;
-    use crate::{InfoMem, to_stdvec_magic};
+    use crate::{to_stdvec_magic, InfoMem};
     use postcard::Error;
 
     extern crate std;
@@ -212,7 +212,6 @@ mod tests {
         assert_eq!(im, de);
     }
 
-
     #[test]
     fn test_magic_ok_header_bad_data() {
         let bad_data = [b'P', b'I', b'M', 0x80, 0x00];
@@ -226,7 +225,10 @@ mod tests {
     fn test_magic_bad_header_bad_data() {
         // Replace 0x00 with 0x80 for a legal header.
         // Replace '/' with '.' for a legal semver.
-        let bad_data = [b'P', b'I', b'M', 0x00, 0x0a, b'0', b'.', b'1', b'/', b'0', b'-', b't', b'e', b's', b't'];
+        let bad_data = [
+            b'P', b'I', b'M', 0x00, 0x0a, b'0', b'.', b'1', b'/', b'0', b'-', b't', b'e', b's',
+            b't',
+        ];
 
         let err = from_bytes_magic(&bad_data).unwrap_err();
 

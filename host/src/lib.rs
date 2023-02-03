@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::Command;
 
 use postcard::to_stdvec;
-use postcard_infomem::{InfoMem, to_stdvec_magic};
+use postcard_infomem::{to_stdvec_magic, InfoMem};
 use rustc_version::version_meta;
 use semver::Version;
 use time::OffsetDateTime;
@@ -55,7 +55,7 @@ pub fn generate_from_env<'a>() -> Result<InfoMem<'a>, Box<dyn Error>> {
 }
 
 pub struct WriterConfig {
-    header: bool
+    header: bool,
 }
 
 impl WriterConfig {
@@ -67,9 +67,7 @@ impl WriterConfig {
 
 impl Default for WriterConfig {
     fn default() -> Self {
-        Self {
-            header: true
-        }
+        Self { header: true }
     }
 }
 
@@ -84,7 +82,7 @@ where
     } else {
         to_stdvec(&im)?
     };
-     
+
     fp.write_all(&buf)?;
     Ok(())
 }
