@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-use postcard::{to_stdvec, serialize_with_flavor};
+use postcard::to_stdvec;
 use postcard_infomem::{InfoMem, to_stdvec_magic};
 use rustc_version::version_meta;
 use semver::Version;
@@ -17,8 +17,6 @@ fn extract_short_git_string(s: String) -> Option<String> {
     let short_git_end = s[short_git_begin..].find(' ')?;
     Some(s[short_git_begin..short_git_begin + short_git_end].to_string())
 }
-
-
 
 pub fn generate_from_env<'a>() -> Result<InfoMem<'a>, Box<dyn Error>> {
     let mut im = InfoMem::default();

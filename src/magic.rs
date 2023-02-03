@@ -1,3 +1,5 @@
+pub use ser::to_slice_magic;
+
 #[cfg(feature = "alloc")]
 pub use ser::to_allocvec_magic;
 
@@ -7,11 +9,16 @@ pub use ser::to_allocvec_magic as to_stdvec_magic;
 pub mod ser {
     use core::ops::IndexMut;
     use crate::*;
-    use postcard::ser_flavors::Flavor;
+    use postcard::ser_flavors::{Flavor, Slice};
     use postcard::{Error, Result, serialize_with_flavor};
 
     #[cfg(feature = "alloc")]
     use postcard::ser_flavors::AllocVec;
+
+    pub fn to_slice_magic<'a>(value: &InfoMem, buf: &'a mut [u8]) -> Result<&'a mut [u8]> {
+        let magic = Magic::try_new(Slice::new(buf))?;
+        serialize_with_flavor(&value, magic)
+    }
 
     #[cfg(feature = "alloc")]
     pub fn to_allocvec_magic(value: &InfoMem) -> Result<Vec<u8>> {
@@ -58,10 +65,17 @@ pub mod ser {
 }
 
 pub mod de {
+    use crate::*;
     use core::marker::PhantomData;
 
-    use postcard::de_flavors::Flavor;
+    use postcard::de_flavors::{Flavor, Slice};
+    use postcard::Deserializer;
     use postcard::Result;
+
+    pub fn from_bytes_magic(s: &[u8]) -> Result<InfoMem> {
+        let mut de_magic = Deserializer::from_flavor(de::Magic::new(Slice::new(s)));
+        InfoMem::deserialize(&mut de_magic)
+    }
 
     #[derive(PartialEq)]
     enum State {
@@ -137,13 +151,9 @@ pub mod de {
 
 #[cfg(test)]
 mod tests {
-    use super::{de, ser};
-    use crate::InfoMem;
-    use postcard::ser_flavors::AllocVec;
-    use postcard::{serialize_with_flavor, Error};
-    use postcard::de_flavors::Slice;
-    use postcard::Deserializer;
-    use serde::Deserialize;
+    use crate::de::from_bytes_magic;
+    use crate::{InfoMem, to_stdvec_magic};
+    use postcard::Error;
 
     extern crate std;
     use std::{print, vec};
@@ -152,8 +162,7 @@ mod tests {
     fn test_magic_ser() {
         let im = InfoMem::default();
 
-        let magic = ser::Magic::try_new(AllocVec::default()).unwrap();
-        let ser = serialize_with_flavor(&im, magic).unwrap();
+        let ser = to_stdvec_magic(&im).unwrap();
         ser.iter().for_each(|b| {
             print!("{:02X} ", b);
         });
@@ -165,13 +174,10 @@ mod tests {
     fn test_magic_deser() {
         let im = InfoMem::default();
 
-        let magic = ser::Magic::try_new(AllocVec::default()).unwrap();
-        let ser = serialize_with_flavor(&im, magic).unwrap();
+        let ser = to_stdvec_magic(&im).unwrap();
+        let de = from_bytes_magic(&ser).unwrap();
 
-        let mut de = Deserializer::from_flavor(de::Magic::new(Slice::new(&ser)));
-        let im_de = InfoMem::deserialize(&mut de).unwrap();
-
-        assert_eq!(im, im_de);
+        assert_eq!(im, de);
     }
 
     #[test]
@@ -179,17 +185,15 @@ mod tests {
         let im = InfoMem::default();
         let mut all_data = vec![0, 1, 2, 3, 4];
 
-        let magic = ser::Magic::try_new(AllocVec::default()).unwrap();
-        let ser = serialize_with_flavor(&im, magic).unwrap();
+        let ser = to_stdvec_magic(&im).unwrap();
         all_data.extend(ser);
         all_data.iter().for_each(|b| {
             print!("{:02X} ", b);
         });
 
-        let mut de = Deserializer::from_flavor(de::Magic::new(Slice::new(&all_data)));
-        let im_de = InfoMem::deserialize(&mut de).unwrap();
+        let de = from_bytes_magic(&all_data).unwrap();
 
-        assert_eq!(im, im_de);
+        assert_eq!(im, de);
     }
 
     #[test]
@@ -197,17 +201,15 @@ mod tests {
         let im = InfoMem::default();
         let mut all_data = vec![b'P', b'I'];
 
-        let magic = ser::Magic::try_new(AllocVec::default()).unwrap();
-        let ser = serialize_with_flavor(&im, magic).unwrap();
+        let ser = to_stdvec_magic(&im).unwrap();
         all_data.extend(ser);
         all_data.iter().for_each(|b| {
             print!("{:02X} ", b);
         });
 
-        let mut de = Deserializer::from_flavor(de::Magic::new(Slice::new(&all_data)));
-        let im_de = InfoMem::deserialize(&mut de).unwrap();
+        let de = from_bytes_magic(&all_data).unwrap();
 
-        assert_eq!(im, im_de);
+        assert_eq!(im, de);
     }
 
 
@@ -215,8 +217,7 @@ mod tests {
     fn test_magic_ok_header_bad_data() {
         let bad_data = [b'P', b'I', b'M', 0x80, 0x00];
 
-        let mut de = Deserializer::from_flavor(de::Magic::new(Slice::new(&bad_data)));
-        let err = InfoMem::deserialize(&mut de).unwrap_err();
+        let err = from_bytes_magic(&bad_data).unwrap_err();
 
         assert_eq!(err, Error::SerdeDeCustom);
     }
@@ -227,8 +228,7 @@ mod tests {
         // Replace '/' with '.' for a legal semver.
         let bad_data = [b'P', b'I', b'M', 0x00, 0x0a, b'0', b'.', b'1', b'/', b'0', b'-', b't', b'e', b's', b't'];
 
-        let mut de = Deserializer::from_flavor(de::Magic::new(Slice::new(&bad_data)));
-        let err = InfoMem::deserialize(&mut de).unwrap_err();
+        let err = from_bytes_magic(&bad_data).unwrap_err();
 
         assert_eq!(err, Error::DeserializeUnexpectedEnd);
     }
