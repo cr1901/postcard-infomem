@@ -15,7 +15,9 @@ msp430g2553 = { version = "0.4.0", optional = true, features = [ "rt" ] }
 panic-msp430 = "0.4.0"
 
 [target.thumbv6m-none-eabi.dependencies]
-rp2040-hal = { version = "0.7.0", optional = true }
+cortex-m-rt = "0.7.2"
+panic-halt = "0.2.0"
+rp2040-hal = { version = "0.7.0", optional = true, features = [ "rt" ] }
 
 [build-dependencies]
 postcard-infomem-host = { path = "../host" }
