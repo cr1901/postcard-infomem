@@ -73,7 +73,7 @@ pub mod de {
     use postcard::Result;
 
     pub fn from_bytes_magic(s: &[u8]) -> Result<InfoMem> {
-        let mut de_magic = Deserializer::from_flavor(de::Magic::new(Slice::new(s)));
+        let mut de_magic = Deserializer::from_flavor(de::Magic::try_new(Slice::new(s))?);
         InfoMem::deserialize(&mut de_magic)
     }
 
@@ -91,7 +91,6 @@ pub mod de {
         B: Flavor<'de>,
     {
         flav: B,
-        state: State,
         _phantom: PhantomData<&'de [u8]>,
     }
 
@@ -99,30 +98,27 @@ pub mod de {
     where
         B: Flavor<'de>,
     {
-        pub fn new(flav: B) -> Self {
-            Self {
-                flav,
-                state: State::SawNone,
-                _phantom: PhantomData,
-            }
-        }
+        pub fn try_new(mut flav: B) -> Result<Self> {
+            let mut state = State::SawNone;
 
-        fn parse_magic(&mut self) -> Result<()> {
-            while self.state != State::Idle {
-                let byte = self.flav.pop()?;
+            while state != State::Idle {
+                let byte = flav.pop()?;
 
-                match self.state {
+                match state {
                     State::Idle => {}
-                    State::SawNone if byte == b'P' => self.state = State::SawP,
-                    State::SawP if byte == b'I' => self.state = State::SawI,
-                    State::SawI if byte == b'M' => self.state = State::SawM,
-                    State::SawM if byte == 0x80 => self.state = State::Idle,
-                    _ if byte == b'P' => self.state = State::SawP,
-                    _ => self.state = State::SawNone,
+                    State::SawNone if byte == b'P' => state = State::SawP,
+                    State::SawP if byte == b'I' => state = State::SawI,
+                    State::SawI if byte == b'M' => state = State::SawM,
+                    State::SawM if byte == 0x80 => state = State::Idle,
+                    _ if byte == b'P' => state = State::SawP,
+                    _ => state = State::SawNone,
                 }
             }
 
-            Ok(())
+            Ok(Self {
+                flav,
+                _phantom: PhantomData,
+            })
         }
     }
 
@@ -134,12 +130,10 @@ pub mod de {
         type Source = B::Source;
 
         fn pop(&mut self) -> Result<u8> {
-            self.parse_magic()?;
             self.flav.pop()
         }
 
         fn try_take_n(&mut self, ct: usize) -> Result<&'de [u8]> {
-            self.parse_magic()?;
             self.flav.try_take_n(ct)
         }
 
