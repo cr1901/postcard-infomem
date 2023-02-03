@@ -6,15 +6,16 @@ use std::path::{Path, PathBuf};
 use postcard_infomem_host::*;
 
 fn main() {
-    // Right now, embedding infomem into a hosted app is unsupported.
-    if env::var("CARGO_CFG_TARGET_OS").unwrap() != "none" {
-        return;
-    } else {
-        let out = &PathBuf::from(env::var_os("OUT_DIR").unwrap());
+    // Right now, embedding infomem into a hosted app is unsupported. Pretend
+    // it is possible for the time being so the build succeeds.
+    let out = &PathBuf::from(env::var_os("OUT_DIR").unwrap());
 
-        let im = generate_from_env().unwrap();
-        write_info_to_file(&im, out.join("info.bin"), Default::default()).unwrap();
+    // This is default if no rerun-if-changed lines in build.rs.
+    println!("cargo:rerun-if-changed=src");
+    let im = generate_from_env().unwrap();
+    write_info_to_file(&im, out.join("info.bin"), Default::default()).unwrap();
 
+    if env::var("CARGO_CFG_TARGET_OS").unwrap() == "none" {
         let (arch, target) = decide_arch_target();
         write_out_memory_x(&out, &target);
         decide_link_args(&arch, &target);
@@ -76,6 +77,10 @@ fn decide_link_args(arch: &str, target: &str) {
             println!("cargo:rustc-link-arg=-mcpu=msp430");
             println!("cargo:rustc-link-arg=-lmul_none");
             println!("cargo:rustc-link-arg=-lgcc");
+        }
+        "rp2040-hal" if arch == "arm" => {
+            println!("cargo:rustc-link-arg=-Tlink.x");
+            println!("cargo:rustc-link-arg=--nmagic");
         }
         _ => unreachable!(),
     }
