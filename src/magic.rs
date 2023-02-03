@@ -1,3 +1,4 @@
+pub use de::from_bytes_magic;
 pub use ser::to_slice_magic;
 
 #[cfg(feature = "alloc")]
@@ -10,7 +11,7 @@ pub mod ser {
     use crate::*;
     use core::ops::IndexMut;
     use postcard::ser_flavors::{Flavor, Slice};
-    use postcard::{serialize_with_flavor, Error, Result};
+    use postcard::{serialize_with_flavor, Result};
 
     #[cfg(feature = "alloc")]
     use postcard::ser_flavors::AllocVec;
@@ -35,15 +36,8 @@ pub mod ser {
         B: Flavor + IndexMut<usize, Output = u8>,
     {
         pub fn try_new(mut flav: B) -> Result<Self> {
-            flav.try_push(b'P')
-                .map_err(|_| Error::SerializeBufferFull)?;
-            flav.try_push(b'I')
-                .map_err(|_| Error::SerializeBufferFull)?;
-            flav.try_push(b'M')
-                .map_err(|_| Error::SerializeBufferFull)?;
-            // Don't try to serialize as UTF-8 string.
-            flav.try_push(0x80)
-                .map_err(|_| Error::SerializeBufferFull)?;
+            // End with 0x80 to avoid the temptation to serialize as UTF-8 string.
+            flav.try_extend(&[b'P', b'I', b'M', 0x80])?;
             Ok(Self(flav))
         }
     }
