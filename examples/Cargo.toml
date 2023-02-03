@@ -1,0 +1,21 @@
+[package]
+name = "postcard-infomem-examples"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cfg-if = "1.0.0"
+postcard-infomem-device = { path = "../device" }
+
+[target.msp430-none-elf.dependencies]
+msp430-rt = "0.4.0"
+msp430g2553 = { version = "0.4.0", optional = true, features = [ "rt" ] }
+panic-msp430 = "0.4.0"
+
+[target.thumbv6m-none-eabi.dependencies]
+rp2040-hal = { version = "0.7.0", optional = true }
+
+[build-dependencies]
+postcard-infomem-host = { path = "../host" }

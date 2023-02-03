@@ -1,3 +1,4 @@
+use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
@@ -24,9 +25,9 @@ pub fn generate_from_env<'a>() -> Result<InfoMem<'a>, Box<dyn Error>> {
     // CARGO_PKG_VERSION hardcoded while compiling this crate.
     im.version = Version::parse(env!("CARGO_PKG_VERSION"))?;
 
-    im.user.name = Some(env!("CARGO_PKG_NAME").into());
+    im.user.name = Some(env::var("CARGO_PKG_NAME")?.into());
     // CARGO_PKG_VERSION comes from whatever is running this build script.
-    im.user.version = Some(Version::parse(&std::env::var("CARGO_PKG_VERSION")?)?);
+    im.user.version = Some(Version::parse(&env::var("CARGO_PKG_VERSION")?)?);
 
     // Similar in spirit to https://github.com/fusion-engineering/rust-git-version,
     // except done at runtime of a build-script, not compile-time of a crate.
