@@ -6,8 +6,6 @@ use std::path::{Path, PathBuf};
 use postcard_infomem_host::*;
 
 fn main() {
-    // Right now, embedding infomem into a hosted app is unsupported. Pretend
-    // it is possible for the time being so the build succeeds.
     let out = &PathBuf::from(env::var_os("OUT_DIR").unwrap());
 
     // This is default if no rerun-if-changed lines in build.rs.
@@ -15,15 +13,20 @@ fn main() {
     let im = generate_from_env().unwrap();
     write_info_to_file(&im, out.join("info.bin"), Default::default()).unwrap();
 
-    if env::var("CARGO_CFG_TARGET_OS").unwrap() == "none" {
-        let (arch, target) = decide_arch_target();
-        write_out_memory_x(&out, &target);
-        decide_link_args(&arch, &target);
-    }
+    let (arch, target, bare) = decide_arch_target();
+    write_out_memory_x(&out, &target);
+    decide_link_args(&arch, &target, bare);
 }
 
-fn decide_arch_target() -> (String, String) {
+fn decide_arch_target() -> (String, String, bool) {
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+    let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+
+    // Fast path for non-bare-metal stuff- ignore any features.
+    if os != "none" {
+        return (arch, os, false);
+    }
+
     let targets = match &*arch {
         "msp430" => vec!["msp430g2553"],
         "arm" => vec!["rp2040-hal"],
@@ -32,7 +35,7 @@ fn decide_arch_target() -> (String, String) {
 
     for t in targets.clone() {
         if env::var("CARGO_FEATURE_".to_owned() + &t.to_uppercase().replace('-', "_")).is_ok() {
-            return (arch, t.to_owned());
+            return (arch, t.to_owned(), true);
         }
     }
 
@@ -69,19 +72,29 @@ fn write_out_memory_x(out: &Path, target: &str) {
     println!("cargo:rerun-if-changed=memory/{}.x", target);
 }
 
-fn decide_link_args(arch: &str, target: &str) {
-    match target {
-        "msp430g2553" if arch == "msp430" => {
-            println!("cargo:rustc-link-arg=-Tlink.x");
-            println!("cargo:rustc-link-arg=-nostartfiles");
-            println!("cargo:rustc-link-arg=-mcpu=msp430");
-            println!("cargo:rustc-link-arg=-lmul_none");
-            println!("cargo:rustc-link-arg=-lgcc");
+fn decide_link_args(arch: &str, target: &str, bare: bool) {
+    if bare {
+        match target {
+            "msp430g2553" if arch == "msp430" => {
+                println!("cargo:rustc-link-arg=-Tlink.x");
+                println!("cargo:rustc-link-arg=-nostartfiles");
+                println!("cargo:rustc-link-arg=-mcpu=msp430");
+                println!("cargo:rustc-link-arg=-lmul_none");
+                println!("cargo:rustc-link-arg=-lgcc");
+            }
+            "rp2040-hal" if arch == "arm" => {
+                println!("cargo:rustc-link-arg=-Tlink.x");
+                println!("cargo:rustc-link-arg=--nmagic");
+            },
+            _ => unreachable!(),
         }
-        "rp2040-hal" if arch == "arm" => {
-            println!("cargo:rustc-link-arg=-Tlink.x");
-            println!("cargo:rustc-link-arg=--nmagic");
+    } else {
+        let abi = env::var("CARGO_CFG_TARGET_ENV").unwrap();
+        match target {
+            "windows" if abi == "gnu" => {
+                println!("cargo:rustc-link-arg=-Tmemory.x");
+            }
+            _ => unimplemented!("example is not implemented for os {} and abi {}", target, abi)
         }
-        _ => unreachable!(),
     }
 }

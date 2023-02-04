@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 use cfg_if::cfg_if;
 
@@ -7,7 +7,9 @@ cfg_if! {
     if #[cfg(feature = "msp430g2553")] {
         extern crate panic_msp430;
         use msp430_rt::entry;
-        use msp430g2553::interrupt as _;
+
+        #[allow(unused)]
+        use msp430g2553::interrupt;
     } else if #[cfg(feature = "rp2040-hal")] {
         extern crate panic_halt;
         use rp2040_hal::entry;
