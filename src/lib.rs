@@ -14,14 +14,29 @@ mod magic;
 pub use magic::*;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct InfoMem<'a> {
+pub struct InfoMem<'a, T = &'a [u8]> where T: sealed::Sealed {
     pub version: Version,
     #[serde(borrow)]
     pub app: AppInfo<'a>,
     pub rustc: RustcInfo<'a>,
+    pub user: Option<T>
 }
 
-impl<'a> Default for InfoMem<'a> {
+pub(crate) mod sealed {
+    #[cfg(all(not(feature = "std"), feature = "alloc"))]
+    extern crate alloc;
+    #[cfg(all(not(feature = "std"), feature = "alloc"))]
+    use alloc::vec::Vec;
+
+    pub trait Sealed {}
+
+    impl Sealed for &[u8] {}
+    impl Sealed for &mut [u8] {}
+    #[cfg(feature = "alloc")]
+    impl Sealed for Vec<u8> {}
+}
+
+impl<'a, T> Default for InfoMem<'a, T> where T: sealed::Sealed {
     fn default() -> Self {
         InfoMem {
             // This will panic at compile time. If CARGO_PKG_VERSION fails to
@@ -30,11 +45,12 @@ impl<'a> Default for InfoMem<'a> {
             version: Version::parse(env!("CARGO_PKG_VERSION")).unwrap(),
             app: Default::default(),
             rustc: Default::default(),
+            user: Option::<T>::None
         }
     }
 }
 
-impl<'a> InfoMem<'a> {
+impl<'a, T> InfoMem<'a, T> where T: sealed::Sealed {
     pub fn new() -> Self {
         Self::default()
     }
@@ -154,7 +170,19 @@ mod tests {
 
     #[test]
     fn round_trip_default() {
-        let im = InfoMem::default();
+        let im: InfoMem = InfoMem::default();
+
+        let ser = to_allocvec(&im).unwrap();
+        let de = from_bytes(&ser).unwrap();
+
+        assert_eq!(im, de);
+    }
+
+    #[test]
+    fn round_trip_default_with_user_payload() {
+        let mut im: InfoMem = InfoMem::default();
+        let payload = [0, 1, 2, 3, 4];
+        im.user = Some(&payload);
 
         let ser = to_allocvec(&im).unwrap();
         let de = from_bytes(&ser).unwrap();
