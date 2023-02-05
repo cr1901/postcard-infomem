@@ -14,7 +14,11 @@ SECTIONS {
     } > INFOMEM
 }
 
-ASSERT((_einfo - _sinfo) < 255, "
-ERROR(memory.x): Information memory is greater than 254 bytes and overwrites MSP430Gx2xx calibration data");
+/* This is a precaution. If you have a way to save the calibration data before
+it's been erased, all 256-2 bytes of information memory can be used. */
+ASSERT((_einfo - _sinfo) <= 192, "
+ERROR(memory.x): Information memory is greater than 192 bytes long. Erasing flash
+to write the information memory would also erase (and possibly overwrite) MSP430Gx2xx
+calibration data.");
 
 
