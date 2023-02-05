@@ -25,13 +25,13 @@ pub fn generate_from_env<'a>() -> Result<InfoMem<'a>, Box<dyn Error>> {
     // CARGO_PKG_VERSION hardcoded while compiling this crate.
     im.version = Version::parse(env!("CARGO_PKG_VERSION"))?;
 
-    im.user.name = Some(env::var("CARGO_PKG_NAME")?.into());
+    im.app.name = Some(env::var("CARGO_PKG_NAME")?.into());
     // CARGO_PKG_VERSION comes from whatever is running this build script.
-    im.user.version = Some(Version::parse(&env::var("CARGO_PKG_VERSION")?)?);
+    im.app.version = Some(Version::parse(&env::var("CARGO_PKG_VERSION")?)?);
 
     // Similar in spirit to https://github.com/fusion-engineering/rust-git-version,
     // except done at runtime of a build-script, not compile-time of a crate.
-    im.user.git = match Command::new("git")
+    im.app.git = match Command::new("git")
         .args(["describe", "--always", "--dirty", "--tags"])
         .output()
     {
@@ -42,7 +42,7 @@ pub fn generate_from_env<'a>() -> Result<InfoMem<'a>, Box<dyn Error>> {
         _ => Some("unknown".into()),
     };
 
-    im.user.build_date = Some(OffsetDateTime::now_local()?);
+    im.app.build_date = Some(OffsetDateTime::now_local()?);
 
     if let Ok(rv) = version_meta() {
         im.rustc.version = Some(rv.semver);

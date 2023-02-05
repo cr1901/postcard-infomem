@@ -17,7 +17,7 @@ pub use magic::*;
 pub struct InfoMem<'a> {
     pub version: Version,
     #[serde(borrow)]
-    pub user: UserInfo<'a>,
+    pub app: AppInfo<'a>,
     pub rustc: RustcInfo<'a>,
 }
 
@@ -28,7 +28,7 @@ impl<'a> Default for InfoMem<'a> {
             // parse at runtime (note that Version::parse is a const fn, and
             // the unwrap should be infallible), we have much bigger problems.
             version: Version::parse(env!("CARGO_PKG_VERSION")).unwrap(),
-            user: Default::default(),
+            app: Default::default(),
             rustc: Default::default(),
         }
     }
@@ -41,7 +41,7 @@ impl<'a> InfoMem<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct UserInfo<'a> {
+pub struct AppInfo<'a> {
     pub name: Option<InfoStr<'a>>,
     pub version: Option<Version>,
     #[serde(borrow)]
@@ -49,7 +49,7 @@ pub struct UserInfo<'a> {
     pub build_date: Option<OffsetDateTime>,
 }
 
-impl<'a> Default for UserInfo<'a> {
+impl<'a> Default for AppInfo<'a> {
     fn default() -> Self {
         Self {
             name: None,
