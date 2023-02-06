@@ -10,7 +10,7 @@ fn main() {
 
     // This is default if no rerun-if-changed lines in build.rs.
     println!("cargo:rerun-if-changed=src");
-    let im = generate_from_env().unwrap();
+    let im = generate_from_env(EnvConfig::default()).unwrap();
     write_info_to_file(&im, out.join("info.bin"), Default::default()).unwrap();
 
     let (arch, target, bare) = decide_arch_target();
