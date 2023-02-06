@@ -14,9 +14,17 @@ extern crate alloc;
 #[cfg(all(not(feature = "std"), feature = "alloc"))]
 use alloc::string::{String, ToString};
 
+/** Container for owned or borrowed `String`s.
+
+It is analogous to the [`ManagedSlice`](https://docs.rs/managed/latest/managed/enum.ManagedSlice.html)
+type provided by the [`managed`](https://docs.rs/managed/latest/managed/index.html) crate.
+[`str`] and [`String`] populate the `Borrowed` and `Owned` variants, respectively.
+*/
 pub enum InfoStr<'a> {
+    /// Borrowed variant.
     Borrowed(&'a str),
     #[cfg(feature = "alloc")]
+    /// Owned variant, only available with the std or alloc feature enabled.
     Owned(String),
 }
 
