@@ -22,9 +22,6 @@ fn extract_short_git_string(s: String) -> Option<String> {
 pub fn generate_from_env<'a>() -> Result<InfoMem<'a>, Box<dyn Error>> {
     let mut im = InfoMem::default();
 
-    // CARGO_PKG_VERSION hardcoded while compiling this crate.
-    im.version = Version::parse(env!("CARGO_PKG_VERSION"))?;
-
     im.app.name = Some(env::var("CARGO_PKG_NAME")?.into());
     // CARGO_PKG_VERSION comes from whatever is running this build script.
     im.app.version = Some(Version::parse(&env::var("CARGO_PKG_VERSION")?)?);
