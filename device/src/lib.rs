@@ -108,17 +108,7 @@ macro_rules! include_postcard_infomem {
         #[link_section = $sec]
         #[used]
         #[no_mangle]
-        static $var_name: [u8; INFOMEM_LEN] = {
-            let mut arr = [0; INFOMEM_LEN];
-            let mut idx = 0;
-
-            while idx < INFOMEM_LEN {
-                arr[idx] = INFOMEM_REF[idx];
-                idx += 1;
-            }
-
-            arr
-        };
+        static $var_name: [u8; INFOMEM_LEN] = *include_bytes!($pim);
     };
 }
 
