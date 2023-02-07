@@ -111,7 +111,10 @@ pub mod de {
 
     This function is analogous to [`postcard::from_bytes`]. It is intended
     to be used to linearly scan for a serialized [`InfoMem`] `struct` inside a
-    "bag of bytes" when the start offset of the `InfoMem` `struct` is not known. */
+    "bag of bytes" when the start offset of the `InfoMem` `struct` is not known.
+    
+    If the `&[u8]` to be deserialized is _known_ to start with an [`InfoMem`]
+    `struct` _without a header_, use [`postcard::from_bytes`]. */
     pub fn from_bytes_magic<'de, T>(s: &'de [u8]) -> Result<InfoMem<T>> where T: sealed::Sealed + Deserialize<'de> {
         let mut de_magic = Deserializer::from_flavor(de::Magic::try_new(Slice::new(s))?);
         InfoMem::deserialize(&mut de_magic)

@@ -1,5 +1,14 @@
 /*! Core data types for serializing application and compiler-specific
 information into a binary.
+
+The crate does not provide functions for filling serialization data
+structures to be serialized with valid data. Most fields of the main
+[`InfoMem`] `struct` are intended to  filled in automatically by build scripts.
+The [`postcard_infomem_host`](../postcard_infomem_host/index.html) crate can
+help with this.
+
+User-defined data is supported in the form of a generic parameter, whose data
+is placed into the [`user`](InfoMem::user) field of the main [`InfoMem`] struct.
 */
 
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -73,6 +82,8 @@ pub(crate) mod sealed {
 }
 
 impl<'a, T> Default for InfoMem<'a, T> where T: sealed::Sealed {
+    /** Return an empty [`InfoMem`] struct, where all fields (except [`version`](InfoMem::version))
+    are [`Option::None`]. */
     fn default() -> Self {
         InfoMem {
             // This will panic at compile time. If CARGO_PKG_VERSION fails to
