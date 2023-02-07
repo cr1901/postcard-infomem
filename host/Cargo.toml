@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 bitflags = "=2.0.0-rc.1"
+new_string_template = "1.4.0"
 postcard = { version = "1.0.2", default-features = false, features = [ "use-std" ] }
 postcard-infomem = { version = "0.1.0", path = "..", features = [ "std" ] }
 rustc_version = "0.4.0"

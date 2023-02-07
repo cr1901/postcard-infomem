@@ -15,6 +15,9 @@ use rustc_version::version_meta;
 use semver::Version;
 use time::OffsetDateTime;
 
+mod ldscript;
+pub use ldscript::{LdConfig, generate_infomem_ldscript};
+
 // The short string will be fine. 
 /** Workaround function to extract the short git SHA from `rustc -Vv`.
 
