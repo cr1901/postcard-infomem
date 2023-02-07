@@ -9,25 +9,20 @@ preclude using the crate for hosted applications).
 
 This macro can be invoked in one of three ways:
 
-* ```
-  include_postcard_infomem!("/path/to/binary/infomem/file", ".linker-section", VAR_NAME)
+* ```ignore
+  include_postcard_infomem!("/path/to/binary/infomem/file", ".linker-section", VAR_NAME);
   ```
-* ```
-  include_postcard_infomem!("/path/to/binary/infomem/file", ".linker-section")
+* ```ignore
+  include_postcard_infomem!("/path/to/binary/infomem/file", ".linker-section");
   ```
-* ```
-  include_postcard_infomem!("/path/to/binary/infomem/file")
+* ```ignore
+  include_postcard_infomem!("/path/to/binary/infomem/file");
   ```
 
 If `".linker-section"` is omitted, it defaults to `".info"`, and if `VAR_NAME` is
-omitted, the `static` variable's name defaults to `INFOMEM`.
-
-This macro also generates two `const` variables:
-
-* `INFOMEM_REF`: A `&[u8]` that is a reference to the output of the [`include_bytes`] macro.
-* `INFOMEM_LEN`: A `usize` containing the length of `INFOMEM_REF`.
-
-The `static` variable generated will have a type of `[u8; INFOMEM_LEN]`.
+omitted, the `static` variable's name defaults to `INFOMEM`. The `static`
+variable generated will have a type of "the dereferenced return value of
+[`include_bytes`]".
 
 ## Linker Considerations.
 The macro annotates the `static` variable with the [`used` attribute](https://doc.rust-lang.org/reference/abi.html#the-used-attribute)
@@ -102,13 +97,10 @@ macro_rules! include_postcard_infomem {
     };
 
     ($pim:expr, $sec:literal, $var_name:ident) => {
-        const INFOMEM_REF: &[u8] = include_bytes!($pim);
-        const INFOMEM_LEN: usize = INFOMEM_REF.len();
-
         #[link_section = $sec]
         #[used]
         #[no_mangle]
-        static $var_name: [u8; INFOMEM_LEN] = *include_bytes!($pim);
+        static $var_name: [u8; include_bytes!($pim).len()] = *include_bytes!($pim);
     };
 }
 
