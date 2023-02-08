@@ -7,6 +7,7 @@ use std::path::Path;
 
 use new_string_template::template::Template;
 
+// { alignment } needs spaces between braces, otherwise template render fails...
 static INFOMEM_LINKER_SCRIPT_TEMPLATE: &str = r#"
 {header}
 
@@ -79,7 +80,7 @@ impl<'a> Default for BareSectionConfig<'a> {
 
 impl<'a> From<BareSectionConfig<'a>> for LdConfig<'a> {
     fn from(value: BareSectionConfig<'a>) -> Self {
-        if cfg!(target_os = "none") || cfg!(test) {
+        if cfg!(test) || env::var("CARGO_CFG_TARGET_OS").unwrap() == "none" {
             LdConfig {
                 inp_section: value.inp_section,
                 region: Some(value.region),
@@ -135,7 +136,7 @@ impl<'a> Default for BareAppendConfig<'a> {
 
 impl<'a> From<BareAppendConfig<'a>> for LdConfig<'a> {
     fn from(value: BareAppendConfig<'a>) -> Self {
-        if cfg!(target_os = "none") || cfg!(test) {
+        if cfg!(test) || env::var("CARGO_CFG_TARGET_OS").unwrap() == "none" {
             LdConfig {
                 inp_section: value.inp_section,
                 region: Some(value.region),
@@ -163,7 +164,7 @@ impl<'a> Default for HostedConfig<'a> {
 
 impl<'a> From<HostedConfig<'a>> for LdConfig<'a> {
     fn from(value: HostedConfig<'a>) -> Self {
-        if cfg!(all(target_os = "windows", target_env = "gnu")) {
+        if cfg!(test) || (env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" && env::var("CARGO_CFG_TARGET_ENV").unwrap() == "gnu") {
             LdConfig {
                 inp_section: value.inp_section,
                 region: None,
@@ -172,14 +173,14 @@ impl<'a> From<HostedConfig<'a>> for LdConfig<'a> {
                 alignment: Some("__section_alignment__")
             }
         // This will never be supported...
-        } else if cfg!(target_os = "none") {
+        } else if env::var("CARGO_CFG_TARGET_OS").unwrap() == "none"  {
             panic!("HostedConfig is not compatible with target_os = \"none\"");
         // but some OSes that match this might be.
         } else {
             panic!(
                 "HostedConfig is not compatible with target_os = {}, target_env = {}",
-                env::var("CARGO_TARGET_OS").unwrap_or("unknown".into()),
-                env::var("CARGO_TARGET_ENV").unwrap_or("unknown".into())
+                env::var("CARGO_CFG_TARGET_OS").unwrap_or("unknown".into()),
+                env::var("CARGO_CFG_TARGET_ENV").unwrap_or("unknown".into())
             );
         }
     }

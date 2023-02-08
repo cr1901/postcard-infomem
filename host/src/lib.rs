@@ -16,7 +16,7 @@ use semver::Version;
 use time::OffsetDateTime;
 
 mod ldscript;
-pub use ldscript::{generate_infomem_ldscript};
+pub use ldscript::{BareAppendConfig, BareSectionConfig, HostedConfig, generate_infomem_ldscript};
 
 // The short string will be fine. 
 /** Workaround function to extract the short git SHA from `rustc -Vv`.
