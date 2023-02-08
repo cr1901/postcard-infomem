@@ -25,6 +25,7 @@ rp2040-hal = { version = "0.7.0", optional = true, features = [ "rt" ] }
 
 [build-dependencies]
 postcard-infomem-host = { path = "../host" }
+static_assertions = "1.1.0"
 
 [features]
 rp2040-hal = ["dep:rp2040-hal", "dep:rp2040-boot2"]
