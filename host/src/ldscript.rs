@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
@@ -10,12 +11,13 @@ static INFOMEM_LINKER_SCRIPT_TEMPLATE: &str = r#"
 {header}
 
 SECTIONS {
+    { alignment }
     .info : {
         _sinfo = .;
         KEEP(*({info_section_name}))
         _einfo = .;
-    } {memory_region} {insert_before_after}
-}
+    } {memory_region}
+} {insert_before_after}
 
 {footer}
 "#;
@@ -27,71 +29,166 @@ Flashing may overwrite important calibration data. The link has stopped as a pre
 ");
 "#;
 
-struct LdConfigInternal<'a> {
+pub struct LdConfig<'a> {
     inp_section: &'a str,
     region: Option<&'a str>,
     insert: InsertType<'a>,
     max_size: Option<usize>,
+    alignment: Option<&'a str>
 }
 
-impl<'a> Default for LdConfigInternal<'a> {
-    fn default() -> Self {
-        Self {
-            inp_section: ".info",
-            region: None,
-            insert: InsertType::None,
-            max_size: None,
-        }
-    }
-}
-
-pub struct LdConfig<'a>(LdConfigInternal<'a>);
-
-pub enum InsertType<'a> {
+enum InsertType<'a> {
     None,
+    #[allow(dead_code)]
     Before(&'a str),
     After(&'a str),
 }
 
-impl<'a> Default for LdConfig<'a> {
+pub struct BareSectionConfig<'a> {
+    inp_section: &'a str,
+    region: &'a str,
+    max_size: Option<usize>
+}
+
+impl<'a> BareSectionConfig<'a> {
+    pub fn set_info_section(mut self, sec: &'a str) -> Self {
+        self.inp_section = sec;
+        self
+    }
+
+    pub fn set_memory_region(mut self, reg: &'a str) -> Self {
+        self.region = reg;
+        self
+    }
+
+    pub fn set_max_size(mut self, size: Option<usize>) -> Self {
+        self.max_size = size;
+        self
+    }
+}
+
+impl<'a> Default for BareSectionConfig<'a> {
     fn default() -> Self {
-        Self(Default::default())
+        Self {
+            inp_section: ".info",
+            region: "INFOMEM",
+            max_size: None
+        }
     }
 }
 
-impl<'a> LdConfig<'a> {
-    pub fn msp430() -> Self {
-        Self(LdConfigInternal {
-            region: Some("INFOMEM"),
-            max_size: Some(192),
-            ..Default::default()
-        })
+impl<'a> From<BareSectionConfig<'a>> for LdConfig<'a> {
+    fn from(value: BareSectionConfig<'a>) -> Self {
+        if cfg!(target_os = "none") || cfg!(test) {
+            LdConfig {
+                inp_section: value.inp_section,
+                region: Some(value.region),
+                insert: InsertType::None,
+                max_size: value.max_size,
+                alignment: None
+            }
+        } else {
+            panic!("BareAppendConfig is only compatible with target_os = \"none\"");
+        }
     }
+}
 
-    pub fn input_section(mut self, sec: &'a str) -> Self {
-        self.0.inp_section = sec;
+pub struct BareAppendConfig<'a> {
+    inp_section: &'a str,
+    out_section: &'a str,
+    region: &'a str,
+    max_size: Option<usize>
+}
+
+impl<'a> BareAppendConfig<'a> {
+    pub fn set_info_section(mut self, sec: &'a str) -> Self {
+        self.inp_section = sec;
         self
     }
 
-    pub fn region(mut self, reg: Option<&'a str>) -> Self {
-        self.0.region = reg;
+    pub fn set_append_section(mut self, sec: &'a str) -> Self {
+        self.out_section = sec;
         self
     }
 
-    pub fn insert(mut self, ins: InsertType<'a>) -> Self {
-        self.0.insert = ins;
+    pub fn set_memory_region(mut self, reg: &'a str) -> Self {
+        self.region = reg;
         self
     }
 
-    pub fn max_size(mut self, size: Option<usize>) -> Self {
-        self.0.max_size = size;
+    pub fn set_max_size(mut self, size: Option<usize>) -> Self {
+        self.max_size = size;
         self
     }
 }
 
-pub fn generate_infomem_ldscript<P>(path: P, cfg: LdConfig) -> Result<(), Box<dyn Error>>
+impl<'a> Default for BareAppendConfig<'a> {
+    fn default() -> Self {
+        Self {
+            inp_section: ".info",
+            out_section: ".rodata",
+            region: "FLASH",
+            max_size: None
+        }
+    }
+}
+
+impl<'a> From<BareAppendConfig<'a>> for LdConfig<'a> {
+    fn from(value: BareAppendConfig<'a>) -> Self {
+        if cfg!(target_os = "none") || cfg!(test) {
+            LdConfig {
+                inp_section: value.inp_section,
+                region: Some(value.region),
+                insert: InsertType::After(value.out_section),
+                max_size: value.max_size,
+                alignment: None
+            }
+        } else {
+            panic!("BareAppendConfig is only compatible with target_os = \"none\"");
+        }
+    }
+}
+
+pub struct HostedConfig<'a> {
+    inp_section: &'a str,
+}
+
+impl<'a> Default for HostedConfig<'a> {
+    fn default() -> Self {
+        Self {
+            inp_section: ".info"
+        }
+    }
+}
+
+impl<'a> From<HostedConfig<'a>> for LdConfig<'a> {
+    fn from(value: HostedConfig<'a>) -> Self {
+        if cfg!(all(target_os = "windows", target_env = "gnu")) {
+            LdConfig {
+                inp_section: value.inp_section,
+                region: None,
+                insert: InsertType::After(".text"),
+                max_size: None,
+                alignment: Some("__section_alignment__")
+            }
+        // This will never be supported...
+        } else if cfg!(target_os = "none") {
+            panic!("HostedConfig is not compatible with target_os = \"none\"");
+        // but some OSes that match this might be.
+        } else {
+            panic!(
+                "HostedConfig is not compatible with target_os = {}, target_env = {}",
+                env::var("CARGO_TARGET_OS").unwrap_or("unknown".into()),
+                env::var("CARGO_TARGET_ENV").unwrap_or("unknown".into())
+            );
+        }
+    }
+}
+
+pub fn generate_infomem_ldscript<'a, P, L>(path: P, cfg: L) -> Result<(), Box<dyn Error>>
 where
     P: AsRef<Path>,
+    L: Into<LdConfig<'a>>,
 {
     let filename = path
         .as_ref()
@@ -103,7 +200,7 @@ where
         .parent()
         .ok_or("invalid path for linker script")?
         .to_string_lossy();
-    let script = generate_script(cfg, &filename)?;
+    let script = generate_script(cfg.into(), &filename)?;
     let mut fp = File::create(&path)?;
     fp.write_all(&script.as_bytes())?;
 
@@ -117,14 +214,14 @@ fn generate_script(cfg: LdConfig, filename: &str) -> Result<String, Box<dyn Erro
     let templ = Template::new(INFOMEM_LINKER_SCRIPT_TEMPLATE);
 
     let mut data: HashMap<&str, String> = HashMap::new();
-    generate_header(&mut data);
-    generate_body(&mut data, &cfg.0);
-    generate_footer(&mut data, &cfg.0, filename)?;
+    generate_header(&mut data, &cfg);
+    generate_body(&mut data, &cfg);
+    generate_footer(&mut data, &cfg, filename)?;
 
     Ok(templ.render(&data)?)
 }
 
-fn generate_header(data: &mut HashMap<&str, String>) {
+fn generate_header(data: &mut HashMap<&str, String>, _cfg: &LdConfig) {
     data.insert(
         "header",
         concat!(
@@ -138,26 +235,31 @@ fn generate_header(data: &mut HashMap<&str, String>) {
     );
 }
 
-fn generate_body<'a>(data: &mut HashMap<&str, String>, cfg: &LdConfigInternal<'a>) {
+fn generate_body(data: &mut HashMap<&str, String>, cfg: &LdConfig) {
     data.insert("info_section_name", cfg.inp_section.into());
+
+    match cfg.alignment {
+        None => data.insert("alignment", "".into()),
+        Some(s) => data.insert("alignment", format!(". = ALIGN({});", s)),
+    };
 
     match cfg.region {
         None => data.insert("memory_region", "".into()),
-        Some(s) => data.insert("memory_region", "> ".to_owned() + s),
+        Some(s) => data.insert("memory_region", format!("> {}", s)),
     };
 
     match cfg.insert {
         InsertType::None => data.insert("insert_before_after", "".into()),
         InsertType::Before(s) => {
-            data.insert("insert_before_after", "INSERT BEFORE ".to_owned() + s)
+            data.insert("insert_before_after", format!("INSERT BEFORE {}", s))
         }
-        InsertType::After(s) => data.insert("insert_before_after", "INSERT AFTER ".to_owned() + s),
+        InsertType::After(s) => data.insert("insert_before_after", format!("INSERT AFTER {}", s)),
     };
 }
 
-fn generate_footer<'a>(
+fn generate_footer(
     data: &mut HashMap<&str, String>,
-    cfg: &LdConfigInternal<'a>,
+    cfg: &LdConfig,
     filename: &str,
 ) -> Result<(), Box<dyn Error>> {
     match cfg.max_size {
@@ -194,29 +296,65 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(all(target_os = "windows", target_env = "gnu"))]
     #[test]
-    fn generate_default() {
-        let lds = generate_script(LdConfig::default(), "foo.x").unwrap();
-        assert_ldscript_eq(
+    fn generate_hosted_windows_gnu() {
+        let cfg = HostedConfig::default().into();
+
+        let lds = generate_script(cfg, "foo.x").unwrap();
+        // FIXME: ldscript parser needs to be taught about "INSERT BEFORE/AFTER"...
+        assert_eq!(
             &lds,
             indoc! {"
-                SECTIONS {
-                    .info : {
-                        _sinfo = .;
-                        KEEP(*(.info))
-                        _einfo = .;
-                    }  
-                }
+            
+            /* Generated by postcard-infomem-host version 0.1.0 */
+            
+            SECTIONS {
+                . = ALIGN(__section_alignment__);
+                .info : {
+                    _sinfo = .;
+                    KEEP(*(.info))
+                    _einfo = .;
+                } 
+            } INSERT AFTER .text
+            
+            
             "},
-        )
-        .unwrap();
+        );
     }
 
     #[test]
-    fn generate_max_with_region() {
-        let mut cfg = LdConfig::default();
-        cfg.0.region = Some("INFOMEM");
-        cfg.0.max_size = Some(192);
+    fn generate_bare_append() {
+        let cfg = BareAppendConfig::default().into();
+
+        let lds = generate_script(cfg, "foo.x").unwrap();
+        // FIXME: ldscript parser needs to be taught about "INSERT BEFORE/AFTER"...
+        assert_eq!(
+            &lds,
+            indoc! {"
+            
+            /* Generated by postcard-infomem-host version 0.1.0 */
+
+            SECTIONS {
+                
+                .info : {
+                    _sinfo = .;
+                    KEEP(*(.info))
+                    _einfo = .;
+                } > FLASH
+            } INSERT AFTER .rodata
+            
+            
+            "},
+        );
+    }
+
+    #[test]
+    fn generate_bare_section() {
+        let cfg = BareSectionConfig::default()
+            .set_max_size(Some(192))
+            .set_memory_region("INFOMEM")
+            .into();
 
         let lds = generate_script(cfg, "foo.x").unwrap();
         assert_ldscript_eq(
