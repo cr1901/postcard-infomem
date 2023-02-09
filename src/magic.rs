@@ -12,7 +12,7 @@ pub use ser::to_allocvec_magic;
 pub use ser::to_allocvec_magic as to_stdvec_magic;
 
 pub mod ser {
-    /*! Serialization methods and traits for serializing [`InfoMem`] to the 
+    /*! Serialization methods and traits for serializing [`InfoMem`] to the
     [`postcard`] wire format.
     */
 
@@ -28,7 +28,10 @@ pub mod ser {
     /** Serialize [`InfoMem`] into a [`slice`] with a magic constant header.
 
     This function is analogous to [`postcard::to_slice`]. */
-    pub fn to_slice_magic<'a, T>(value: &InfoMem<T>, buf: &'a mut [u8]) -> Result<&'a mut [u8]> where T: sealed::Sealed + Serialize {
+    pub fn to_slice_magic<'a, T>(value: &InfoMem<T>, buf: &'a mut [u8]) -> Result<&'a mut [u8]>
+    where
+        T: sealed::Sealed + Serialize,
+    {
         let magic = Magic::try_new(Slice::new(buf))?;
         serialize_with_flavor(&value, magic)
     }
@@ -37,14 +40,17 @@ pub mod ser {
     /** Serialize [`InfoMem`] into a [`Vec`] with a magic constant header.
 
     This function is analogous to [`postcard::to_allocvec`]. */
-    pub fn to_allocvec_magic<T>(value: &InfoMem<T>) -> Result<Vec<u8>> where T: sealed::Sealed + Serialize {
+    pub fn to_allocvec_magic<T>(value: &InfoMem<T>) -> Result<Vec<u8>>
+    where
+        T: sealed::Sealed + Serialize,
+    {
         let magic = Magic::try_new(AllocVec::default())?;
         serialize_with_flavor(&value, magic)
     }
 
     /** A [`postcard`] [flavor](postcard#flavors) for serializing to the
     Postcard wire format with a header.
-    
+
     The header contains the characters "PIM\x80". This is intended to be the
     top-most serialization flavor; after adding a header, this flavor defers
     to the inner flavor for processing. */
@@ -56,12 +62,12 @@ pub mod ser {
     where
         B: Flavor + IndexMut<usize, Output = u8>,
     {
-        /** 
+        /**
         Attempt to combine a [`postcard`] [flavor](postcard#flavors) with
         the [`Magic`] serializer to add a magic header.
 
         # Arguments
-        
+
         * `flav`: A [`postcard`] [flavor](postcard#flavors), probably a
         [`Slice`] or [`AllocVec`].
 
@@ -112,10 +118,13 @@ pub mod de {
     This function is analogous to [`postcard::from_bytes`]. It is intended
     to be used to linearly scan for a serialized [`InfoMem`] `struct` inside a
     "bag of bytes" when the start offset of the `InfoMem` `struct` is not known.
-    
+
     If the `&[u8]` to be deserialized is _known_ to start with an [`InfoMem`]
     `struct` _without a header_, use [`postcard::from_bytes`]. */
-    pub fn from_bytes_magic<'de, T>(s: &'de [u8]) -> Result<InfoMem<T>> where T: sealed::Sealed + Deserialize<'de> {
+    pub fn from_bytes_magic<'de, T>(s: &'de [u8]) -> Result<InfoMem<T>>
+    where
+        T: sealed::Sealed + Deserialize<'de>,
+    {
         let mut de_magic = Deserializer::from_flavor(de::Magic::try_new(Slice::new(s))?);
         InfoMem::deserialize(&mut de_magic)
     }
@@ -138,7 +147,7 @@ pub mod de {
 
     /** A [`postcard`] [flavor](postcard#flavors) for deserializing from the
     Postcard wire format with a header to an [`InfoMem`].
-    
+
     The header contains the characters "PIM\x80". This is intended to be the
     top-most deserialization flavor; after removing the header, this flavor
     defers to the inner flavor for processing. */
@@ -156,12 +165,12 @@ pub mod de {
     where
         B: Flavor<'de>,
     {
-        /** 
+        /**
         Attempt to combine a [`postcard`] [flavor](postcard#flavors) with
         the [`Magic`] deserializer to remove a magic header.
 
         # Arguments
-        
+
         * `flav`: A [`postcard`] [flavor](postcard#flavors), probably a
         [`Slice`].
 

@@ -89,18 +89,77 @@ of this workspace.
 */
 macro_rules! include_postcard_infomem {
     ($pim:expr) => {
+        #[cfg(not(target_arch = "avr"))]
         include_postcard_infomem!($pim, ".info", INFOMEM);
+
+        #[cfg(target_arch = "avr")]
+        include_postcard_infomem!($pim, avr_infomem);
     };
 
-    ($pim:expr, $sec:literal) => {
-        include_postcard_infomem!($pim, $sec, INFOMEM);
+    ($pim:expr, $sec_or_mod:literal) => {
+        #[cfg(not(target_arch = "avr"))]
+        include_postcard_infomem!($pim, $sec_or_mod, INFOMEM);
+
+        #[cfg(target_arch = "avr")]
+        compile_error!(
+            concat!(
+                "on AVR, the two-argument version of include_postcard_infomem accepts",
+                " an ident as the second argument (received literal)"
+            )
+        );
+    };
+
+    ($pim:expr, $mod:ident) => {
+        #[cfg(not(target_arch = "avr"))]
+        compile_error!(
+            concat!(
+                "on non-AVR targets, the two-argument version of include_postcard_infomem accepts",
+                " a literal as the second argument (received ident)"
+            )
+        );
+
+        /* AVR stores EEPROM in a separate address space. Access the variable
+        INFOMEM from code will try to access at the same offset in a
+        different address space. This is a spatial memory-safety violation.
+        Avoid the problem by not allowing users to access the variable
+        directly.
+
+        We turn off no_mangle because the $mod argument serves that purpose
+        at compile-time (this was multiple payloads can be included if desired).
+
+        TODO: Provide some sort of API to iterate over INFOMEM. */
+        pub mod $mod {
+            #[link_section = ".eeprom"]
+            #[used]
+            static INFOMEM: [u8; include_bytes!($pim).len()] = *include_bytes!($pim);
+
+            /* Abuse the fact that INFOMEM is pointing into the wrong address
+               space to generate an usize to supply to the EEPROM registers. */
+            pub fn start() -> usize {
+                &INFOMEM as *const u8 as usize
+            }
+
+            pub fn len() -> usize {
+                INFOMEM.len()
+            }
+
+            pub fn end() -> usize {
+                start() + len()
+            }
+        }
     };
 
     ($pim:expr, $sec:literal, $var_name:ident) => {
+        #[cfg(not(target_arch = "avr"))]
         #[link_section = $sec]
         #[used]
         #[no_mangle]
         static $var_name: [u8; include_bytes!($pim).len()] = *include_bytes!($pim);
+
+        #[cfg(target_arch = "avr")]
+        compile_error!(
+            "only the single or two-argument version of include_postcard_infomem is supported on AVR"
+        );
     };
 }
 

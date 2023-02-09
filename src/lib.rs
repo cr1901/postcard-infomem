@@ -39,15 +39,18 @@ for all remaining `struct` members. _This crate does not attempt to populate
 this `struct`._
 */
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct InfoMem<'a, T = &'a [u8]> where T: sealed::Sealed {
+pub struct InfoMem<'a, T = &'a [u8]>
+where
+    T: sealed::Sealed,
+{
     /** Version of this `struct` that was deserialized or created, hardcoded
     during crate compilation.
-    
+
     The version is extracted from the `CARGO_PKG_VERSION` environment variable
     when [this crate](./index.html) is compiled. While the [`postcard`] format is [_not_ self-describing](https://postcard.jamesmunns.com/wire-format.html#non-self-describing-format),
     the wire format _is_ stable, and `struct` members are (de)serialized in order.
     _Therefore, this member must always remain first, even between major versions_.
-    
+
     _It is inadvisable to manually alter this field._ The intent of this field
     is to allow backwards (and possibly forwards) compatibility with older
     (newer) versions of this `struct`. */
@@ -61,7 +64,7 @@ pub struct InfoMem<'a, T = &'a [u8]> where T: sealed::Sealed {
 
     It is up to the user to ensure that the data contained in this field is
     parsed or deserialized by external means. */
-    pub user: Option<T>
+    pub user: Option<T>,
 }
 
 /** Private module intended to contrain the types of user-defined payloads
@@ -81,7 +84,10 @@ pub(crate) mod sealed {
     impl Sealed for Vec<u8> {}
 }
 
-impl<'a, T> Default for InfoMem<'a, T> where T: sealed::Sealed {
+impl<'a, T> Default for InfoMem<'a, T>
+where
+    T: sealed::Sealed,
+{
     /** Return an empty [`InfoMem`] struct, where all fields (except [`version`](InfoMem::version))
     are [`Option::None`]. */
     fn default() -> Self {
@@ -92,12 +98,15 @@ impl<'a, T> Default for InfoMem<'a, T> where T: sealed::Sealed {
             version: Version::parse(env!("CARGO_PKG_VERSION")).unwrap(),
             app: Default::default(),
             rustc: Default::default(),
-            user: Option::<T>::None
+            user: Option::<T>::None,
         }
     }
 }
 
-impl<'a, T> InfoMem<'a, T> where T: sealed::Sealed {
+impl<'a, T> InfoMem<'a, T>
+where
+    T: sealed::Sealed,
+{
     /// Wrapper over the [`Default`] implementation.
     pub fn new() -> Self {
         Self::default()
@@ -149,7 +158,7 @@ mod shim {
     This enum is created from a [`rustc_version::Channel`] using its [`From`]
     implementation, and exists mainly to aid in [deriving](https://serde.rs/remote-derive.html)
     the [`Serialize`] and [`Deserialize`] traits for [`RustcInfo`].
-    */ 
+    */
     pub enum Channel {
         /// Development release channel
         Dev,
@@ -226,7 +235,7 @@ pub struct RustcInfo<'a> {
     /// [Semantic version](https://semver.org/) (semver) of the `rustc` compiler.
     pub version: Option<Version>,
     /** [LLVM](https://llvm.org/) version used by the `rustc` compiler.
-     
+
     _Although treated as a semver, older LLVM versions did not follow semver._ */
     pub llvm_version: Option<Version>,
     #[serde(with = "shim::channel_shim")]

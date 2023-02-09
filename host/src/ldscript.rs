@@ -35,7 +35,7 @@ pub struct LdConfig<'a> {
     region: Option<&'a str>,
     insert: InsertType<'a>,
     max_size: Option<usize>,
-    alignment: Option<&'a str>
+    alignment: Option<&'a str>,
 }
 
 enum InsertType<'a> {
@@ -48,7 +48,7 @@ enum InsertType<'a> {
 pub struct BareSectionConfig<'a> {
     inp_section: &'a str,
     region: &'a str,
-    max_size: Option<usize>
+    max_size: Option<usize>,
 }
 
 impl<'a> BareSectionConfig<'a> {
@@ -73,23 +73,26 @@ impl<'a> Default for BareSectionConfig<'a> {
         Self {
             inp_section: ".info",
             region: "INFOMEM",
-            max_size: None
+            max_size: None,
         }
     }
 }
 
 impl<'a> From<BareSectionConfig<'a>> for LdConfig<'a> {
     fn from(value: BareSectionConfig<'a>) -> Self {
-        if cfg!(test) || env::var("CARGO_CFG_TARGET_OS").unwrap() == "none" {
+        if cfg!(test)
+            || env::var("CARGO_CFG_TARGET_OS").unwrap() == "none"
+            || env::var("CARGO_CFG_TARGET_OS").unwrap() == "unknown"
+        {
             LdConfig {
                 inp_section: value.inp_section,
                 region: Some(value.region),
                 insert: InsertType::None,
                 max_size: value.max_size,
-                alignment: None
+                alignment: None,
             }
         } else {
-            panic!("BareAppendConfig is only compatible with target_os = \"none\"");
+            panic!("BareAppendConfig is only compatible with target_os = \"none\", current target_os = \"{}\"", env::var("CARGO_CFG_TARGET_OS").unwrap());
         }
     }
 }
@@ -98,7 +101,7 @@ pub struct BareAppendConfig<'a> {
     inp_section: &'a str,
     out_section: &'a str,
     region: &'a str,
-    max_size: Option<usize>
+    max_size: Option<usize>,
 }
 
 impl<'a> BareAppendConfig<'a> {
@@ -129,7 +132,7 @@ impl<'a> Default for BareAppendConfig<'a> {
             inp_section: ".info",
             out_section: ".rodata",
             region: "FLASH",
-            max_size: None
+            max_size: None,
         }
     }
 }
@@ -142,7 +145,7 @@ impl<'a> From<BareAppendConfig<'a>> for LdConfig<'a> {
                 region: Some(value.region),
                 insert: InsertType::After(value.out_section),
                 max_size: value.max_size,
-                alignment: None
+                alignment: None,
             }
         } else {
             panic!("BareAppendConfig is only compatible with target_os = \"none\"");
@@ -157,30 +160,33 @@ pub struct HostedConfig<'a> {
 impl<'a> Default for HostedConfig<'a> {
     fn default() -> Self {
         Self {
-            inp_section: ".info"
+            inp_section: ".info",
         }
     }
 }
 
 impl<'a> From<HostedConfig<'a>> for LdConfig<'a> {
     fn from(value: HostedConfig<'a>) -> Self {
-        if cfg!(test) || (env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" && env::var("CARGO_CFG_TARGET_ENV").unwrap() == "gnu") {
+        if cfg!(test)
+            || (env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows"
+                && env::var("CARGO_CFG_TARGET_ENV").unwrap() == "gnu")
+        {
             LdConfig {
                 inp_section: value.inp_section,
                 region: None,
                 insert: InsertType::After(".text"),
                 max_size: None,
-                alignment: Some("__section_alignment__")
+                alignment: Some("__section_alignment__"),
             }
         // This will never be supported...
-        } else if env::var("CARGO_CFG_TARGET_OS").unwrap() == "none"  {
+        } else if env::var("CARGO_CFG_TARGET_OS").unwrap() == "none" {
             panic!("HostedConfig is not compatible with target_os = \"none\"");
         // but some OSes that match this might be.
         } else {
             panic!(
                 "HostedConfig is not compatible with target_os = {}, target_env = {}",
-                env::var("CARGO_CFG_TARGET_OS").unwrap_or("unknown".into()),
-                env::var("CARGO_CFG_TARGET_ENV").unwrap_or("unknown".into())
+                env::var("CARGO_CFG_TARGET_OS").unwrap(),
+                env::var("CARGO_CFG_TARGET_ENV").unwrap()
             );
         }
     }
@@ -251,9 +257,7 @@ fn generate_body(data: &mut HashMap<&str, String>, cfg: &LdConfig) {
 
     match cfg.insert {
         InsertType::None => data.insert("insert_before_after", "".into()),
-        InsertType::Before(s) => {
-            data.insert("insert_before_after", format!("INSERT BEFORE {}", s))
-        }
+        InsertType::Before(s) => data.insert("insert_before_after", format!("INSERT BEFORE {}", s)),
         InsertType::After(s) => data.insert("insert_before_after", format!("INSERT AFTER {}", s)),
     };
 }
