@@ -89,77 +89,68 @@ of this workspace.
 */
 macro_rules! include_postcard_infomem {
     ($pim:expr) => {
-        #[cfg(not(target_arch = "avr"))]
-        include_postcard_infomem!($pim, ".info", INFOMEM);
-
-        #[cfg(target_arch = "avr")]
-        include_postcard_infomem!($pim, avr_infomem);
-    };
-
-    ($pim:expr, $sec_or_mod:literal) => {
-        #[cfg(not(target_arch = "avr"))]
-        include_postcard_infomem!($pim, $sec_or_mod, INFOMEM);
-
-        #[cfg(target_arch = "avr")]
-        compile_error!(
-            concat!(
-                "on AVR, the two-argument version of include_postcard_infomem accepts",
-                " an ident as the second argument (received literal)"
-            )
-        );
+        include_postcard_infomem!($pim, infomem);
     };
 
     ($pim:expr, $mod:ident) => {
-        #[cfg(not(target_arch = "avr"))]
-        compile_error!(
-            concat!(
-                "on non-AVR targets, the two-argument version of include_postcard_infomem accepts",
-                " a literal as the second argument (received ident)"
-            )
-        );
-
         /* AVR stores EEPROM in a separate address space. Access the variable
         INFOMEM from code will try to access at the same offset in a
         different address space. This is a spatial memory-safety violation.
         Avoid the problem by not allowing users to access the variable
         directly.
 
-        We turn off no_mangle because the $mod argument serves that purpose
-        at compile-time (this was multiple payloads can be included if desired).
-
-        TODO: Provide some sort of API to iterate over INFOMEM. */
+        We turn on no_mangle because multiple INFOMEMs are not
+        supported at this time. */
         pub mod $mod {
-            #[link_section = ".eeprom"]
+            use core::ops::Range;
+            use core::slice::from_raw_parts;
+
+            #[cfg_attr(target_arch = "avr", link_section = ".eeprom")]
+            #[cfg_attr(not(target_arch = "avr"), link_section = ".postcard-infomem")]
+            #[no_mangle]
             #[used]
             static INFOMEM: [u8; include_bytes!($pim).len()] = *include_bytes!($pim);
 
-            /* Abuse the fact that INFOMEM is pointing into the wrong address
-               space to generate an usize to supply to the EEPROM registers. */
-            pub fn start() -> usize {
-                &INFOMEM as *const u8 as usize
+            #[doc="Pointer to an infomem struct that is address-space aware.\
+            \n\
+            The [`Ptr`] struct is a wrapper over a pointer that can be used as \
+            a portable type to access the `INFOMEM` `static` on targets with one or \
+            multiple address spaces. \
+            \n\
+            It is meant to be immediately converted to another, more ergonomic type for \
+            your environment."]
+            pub struct Ptr(*const u8, usize);
+
+            #[doc="Access information memory safely, depending on target. \
+            \n\
+            This can be used as a portable entry point to access the `INFOMEM`
+            `static` on targets with one or multiple address spaces.\n\
+            On most targets, [`From<Ptr>`] will be defined for &[u8], which points \
+            to the `INFOMEM` `static`. On all targets, [`From<Ptr>`] is defined for \
+            [`Range<usize>`], which can iterate over `usize`s representing each address \
+            used by the `INFOMEM` `struct`."]
+            pub fn get<T>() -> T where T: From<Ptr> {
+                Ptr(INFOMEM.as_ptr(), INFOMEM.len()).into()
             }
 
-            pub fn len() -> usize {
-                INFOMEM.len()
+            #[cfg(not(target_arch = "avr"))]
+            impl From<Ptr> for &[u8] {
+                fn from(value: Ptr) -> Self {
+                    // SAFETY: Ptrs can only be created within this module.
+                    // It is derived from a static array with known length.
+                    unsafe { from_raw_parts(value.0, value.1) }
+                }
             }
 
-            pub fn end() -> usize {
-                start() + len()
+            impl From<Ptr> for Range<usize> {
+                fn from(value: Ptr) -> Self {
+                    Range {
+                        start: value.0 as usize,
+                        end: value.0 as usize + value.1
+                    }
+                }
             }
         }
-    };
-
-    ($pim:expr, $sec:literal, $var_name:ident) => {
-        #[cfg(not(target_arch = "avr"))]
-        #[link_section = $sec]
-        #[used]
-        #[no_mangle]
-        static $var_name: [u8; include_bytes!($pim).len()] = *include_bytes!($pim);
-
-        #[cfg(target_arch = "avr")]
-        compile_error!(
-            "only the single or two-argument version of include_postcard_infomem is supported on AVR"
-        );
     };
 }
 

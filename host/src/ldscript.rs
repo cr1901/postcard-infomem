@@ -13,10 +13,10 @@ static INFOMEM_LINKER_SCRIPT_TEMPLATE: &str = r#"
 
 SECTIONS {
     { alignment }
-    .info : {
-        _sinfo = .;
-        KEEP(*({info_section_name}))
-        _einfo = .;
+    .postcard_infomem : {
+        _spostcard_infomem = .;
+        KEEP(*(.postcard_infomem))
+        _epostcard_infomem = .;
     } {memory_region}
 } {insert_before_after}
 
@@ -31,7 +31,6 @@ Flashing may overwrite important calibration data. The link has stopped as a pre
 "#;
 
 pub struct LdConfig<'a> {
-    inp_section: &'a str,
     region: Option<&'a str>,
     insert: InsertType<'a>,
     max_size: Option<usize>,
@@ -46,17 +45,11 @@ enum InsertType<'a> {
 }
 
 pub struct BareSectionConfig<'a> {
-    inp_section: &'a str,
     region: &'a str,
     max_size: Option<usize>,
 }
 
 impl<'a> BareSectionConfig<'a> {
-    pub fn set_info_section(mut self, sec: &'a str) -> Self {
-        self.inp_section = sec;
-        self
-    }
-
     pub fn set_memory_region(mut self, reg: &'a str) -> Self {
         self.region = reg;
         self
@@ -71,7 +64,6 @@ impl<'a> BareSectionConfig<'a> {
 impl<'a> Default for BareSectionConfig<'a> {
     fn default() -> Self {
         Self {
-            inp_section: ".info",
             region: "INFOMEM",
             max_size: None,
         }
@@ -85,7 +77,6 @@ impl<'a> From<BareSectionConfig<'a>> for LdConfig<'a> {
             || env::var("CARGO_CFG_TARGET_OS").unwrap() == "unknown"
         {
             LdConfig {
-                inp_section: value.inp_section,
                 region: Some(value.region),
                 insert: InsertType::None,
                 max_size: value.max_size,
@@ -98,23 +89,12 @@ impl<'a> From<BareSectionConfig<'a>> for LdConfig<'a> {
 }
 
 pub struct BareAppendConfig<'a> {
-    inp_section: &'a str,
     out_section: &'a str,
     region: &'a str,
     max_size: Option<usize>,
 }
 
 impl<'a> BareAppendConfig<'a> {
-    pub fn set_info_section(mut self, sec: &'a str) -> Self {
-        self.inp_section = sec;
-        self
-    }
-
-    pub fn set_append_section(mut self, sec: &'a str) -> Self {
-        self.out_section = sec;
-        self
-    }
-
     pub fn set_memory_region(mut self, reg: &'a str) -> Self {
         self.region = reg;
         self
@@ -129,7 +109,6 @@ impl<'a> BareAppendConfig<'a> {
 impl<'a> Default for BareAppendConfig<'a> {
     fn default() -> Self {
         Self {
-            inp_section: ".info",
             out_section: ".rodata",
             region: "FLASH",
             max_size: None,
@@ -141,7 +120,6 @@ impl<'a> From<BareAppendConfig<'a>> for LdConfig<'a> {
     fn from(value: BareAppendConfig<'a>) -> Self {
         if cfg!(test) || env::var("CARGO_CFG_TARGET_OS").unwrap() == "none" {
             LdConfig {
-                inp_section: value.inp_section,
                 region: Some(value.region),
                 insert: InsertType::After(value.out_section),
                 max_size: value.max_size,
@@ -153,26 +131,25 @@ impl<'a> From<BareAppendConfig<'a>> for LdConfig<'a> {
     }
 }
 
-pub struct HostedConfig<'a> {
-    inp_section: &'a str,
+pub struct HostedConfig {
+
 }
 
-impl<'a> Default for HostedConfig<'a> {
+impl<'a> Default for HostedConfig {
     fn default() -> Self {
         Self {
-            inp_section: ".info",
+            
         }
     }
 }
 
-impl<'a> From<HostedConfig<'a>> for LdConfig<'a> {
-    fn from(value: HostedConfig<'a>) -> Self {
+impl<'a> From<HostedConfig> for LdConfig<'a> {
+    fn from(_value: HostedConfig) -> Self {
         if cfg!(test)
             || (env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows"
                 && env::var("CARGO_CFG_TARGET_ENV").unwrap() == "gnu")
         {
             LdConfig {
-                inp_section: value.inp_section,
                 region: None,
                 insert: InsertType::After(".text"),
                 max_size: None,
@@ -243,8 +220,6 @@ fn generate_header(data: &mut HashMap<&str, String>, _cfg: &LdConfig) {
 }
 
 fn generate_body(data: &mut HashMap<&str, String>, cfg: &LdConfig) {
-    data.insert("info_section_name", cfg.inp_section.into());
-
     match cfg.alignment {
         None => data.insert("alignment", "".into()),
         Some(s) => data.insert("alignment", format!(". = ALIGN({});", s)),
@@ -316,10 +291,10 @@ mod tests {
             
             SECTIONS {
                 . = ALIGN(__section_alignment__);
-                .info : {
-                    _sinfo = .;
-                    KEEP(*(.info))
-                    _einfo = .;
+                .postcard_infomem : {
+                    _spostcard_infomem = .;
+                    KEEP(*(.postcard_infomem))
+                    _epostcard_infomem = .;
                 } 
             } INSERT AFTER .text
             
@@ -342,10 +317,10 @@ mod tests {
 
             SECTIONS {
                 
-                .info : {
-                    _sinfo = .;
-                    KEEP(*(.info))
-                    _einfo = .;
+                .postcard_infomem : {
+                    _spostcard_infomem = .;
+                    KEEP(*(.postcard_infomem))
+                    _epostcard_infomem = .;
                 } > FLASH
             } INSERT AFTER .rodata
             
@@ -366,10 +341,10 @@ mod tests {
             &lds,
             indoc! {"
             SECTIONS {
-                .info : {
-                    _sinfo = .;
-                    KEEP(*(.info))
-                    _einfo = .;
+                .postcard_infomem : {
+                    _spostcard_infomem = .;
+                    KEEP(*(.postcard_infomem))
+                    _epostcard_infomem = .;
                 } > INFOMEM 
             }
 
