@@ -19,21 +19,11 @@ SECTIONS {
         _epostcard_infomem = .;
     } {memory_region}
 } {insert_before_after}
-
-{footer}
-"#;
-
-static INFOMEM_LINKER_SCRIPT_FOOTER_TEMPLATE: &str = r#"
-ASSERT((_einfo - _sinfo) <= {max_safe_info_size}, "
-ERROR({filename}): Information memory output section is greater than {max_safe_info_size} bytes long.
-Flashing may overwrite important calibration data. The link has stopped as a precaution.
-");
 "#;
 
 pub struct LdConfig<'a> {
     region: Option<&'a str>,
     insert: InsertType<'a>,
-    max_size: Option<usize>,
     alignment: Option<&'a str>,
 }
 
@@ -46,17 +36,11 @@ enum InsertType<'a> {
 
 pub struct BareSectionConfig<'a> {
     region: &'a str,
-    max_size: Option<usize>,
 }
 
 impl<'a> BareSectionConfig<'a> {
     pub fn set_memory_region(mut self, reg: &'a str) -> Self {
         self.region = reg;
-        self
-    }
-
-    pub fn set_max_size(mut self, size: Option<usize>) -> Self {
-        self.max_size = size;
         self
     }
 }
@@ -65,7 +49,6 @@ impl<'a> Default for BareSectionConfig<'a> {
     fn default() -> Self {
         Self {
             region: "INFOMEM",
-            max_size: None,
         }
     }
 }
@@ -79,7 +62,6 @@ impl<'a> From<BareSectionConfig<'a>> for LdConfig<'a> {
             LdConfig {
                 region: Some(value.region),
                 insert: InsertType::None,
-                max_size: value.max_size,
                 alignment: None,
             }
         } else {
@@ -91,17 +73,11 @@ impl<'a> From<BareSectionConfig<'a>> for LdConfig<'a> {
 pub struct BareAppendConfig<'a> {
     out_section: &'a str,
     region: &'a str,
-    max_size: Option<usize>,
 }
 
 impl<'a> BareAppendConfig<'a> {
     pub fn set_memory_region(mut self, reg: &'a str) -> Self {
         self.region = reg;
-        self
-    }
-
-    pub fn set_max_size(mut self, size: Option<usize>) -> Self {
-        self.max_size = size;
         self
     }
 }
@@ -111,7 +87,6 @@ impl<'a> Default for BareAppendConfig<'a> {
         Self {
             out_section: ".rodata",
             region: "FLASH",
-            max_size: None,
         }
     }
 }
@@ -122,7 +97,6 @@ impl<'a> From<BareAppendConfig<'a>> for LdConfig<'a> {
             LdConfig {
                 region: Some(value.region),
                 insert: InsertType::After(value.out_section),
-                max_size: value.max_size,
                 alignment: None,
             }
         } else {
@@ -152,7 +126,6 @@ impl<'a> From<HostedConfig> for LdConfig<'a> {
             LdConfig {
                 region: None,
                 insert: InsertType::After(".text"),
-                max_size: None,
                 alignment: Some("__section_alignment__"),
             }
         // This will never be supported...
@@ -184,7 +157,7 @@ where
         .parent()
         .ok_or("invalid path for linker script")?
         .to_string_lossy();
-    let script = generate_script(cfg.into(), &filename)?;
+    let script = generate_script(cfg.into())?;
     let mut fp = File::create(&path)?;
     fp.write_all(&script.as_bytes())?;
 
@@ -194,13 +167,12 @@ where
     Ok(())
 }
 
-fn generate_script(cfg: LdConfig, filename: &str) -> Result<String, Box<dyn Error>> {
+fn generate_script(cfg: LdConfig) -> Result<String, Box<dyn Error>> {
     let templ = Template::new(INFOMEM_LINKER_SCRIPT_TEMPLATE);
 
     let mut data: HashMap<&str, String> = HashMap::new();
     generate_header(&mut data, &cfg);
     generate_body(&mut data, &cfg);
-    generate_footer(&mut data, &cfg, filename)?;
 
     Ok(templ.render(&data)?)
 }
@@ -237,30 +209,6 @@ fn generate_body(data: &mut HashMap<&str, String>, cfg: &LdConfig) {
     };
 }
 
-fn generate_footer(
-    data: &mut HashMap<&str, String>,
-    cfg: &LdConfig,
-    filename: &str,
-) -> Result<(), Box<dyn Error>> {
-    match cfg.max_size {
-        None => {
-            data.insert("footer", "".into());
-        }
-        Some(size) => {
-            let footer_templ = Template::new(INFOMEM_LINKER_SCRIPT_FOOTER_TEMPLATE);
-
-            let mut footer_data: HashMap<&str, String> = HashMap::new();
-            footer_data.insert("max_safe_info_size", size.to_string());
-            footer_data.insert("filename", filename.into());
-
-            let footer = footer_templ.render(&footer_data)?;
-            data.insert("footer", footer.into());
-        }
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,7 +229,7 @@ mod tests {
     fn generate_hosted_windows_gnu() {
         let cfg = HostedConfig::default().into();
 
-        let lds = generate_script(cfg, "foo.x").unwrap();
+        let lds = generate_script(cfg).unwrap();
         // FIXME: ldscript parser needs to be taught about "INSERT BEFORE/AFTER"...
         assert_eq!(
             &lds,
@@ -297,8 +245,6 @@ mod tests {
                     _epostcard_infomem = .;
                 } 
             } INSERT AFTER .text
-            
-            
             "},
         );
     }
@@ -307,7 +253,7 @@ mod tests {
     fn generate_bare_append() {
         let cfg = BareAppendConfig::default().into();
 
-        let lds = generate_script(cfg, "foo.x").unwrap();
+        let lds = generate_script(cfg).unwrap();
         // FIXME: ldscript parser needs to be taught about "INSERT BEFORE/AFTER"...
         assert_eq!(
             &lds,
@@ -323,8 +269,6 @@ mod tests {
                     _epostcard_infomem = .;
                 } > FLASH
             } INSERT AFTER .rodata
-            
-            
             "},
         );
     }
@@ -332,11 +276,10 @@ mod tests {
     #[test]
     fn generate_bare_section() {
         let cfg = BareSectionConfig::default()
-            .set_max_size(Some(192))
             .set_memory_region("INFOMEM")
             .into();
 
-        let lds = generate_script(cfg, "foo.x").unwrap();
+        let lds = generate_script(cfg).unwrap();
         assert_ldscript_eq(
             &lds,
             indoc! {"
@@ -347,11 +290,6 @@ mod tests {
                     _epostcard_infomem = .;
                 } > INFOMEM 
             }
-
-            ASSERT((_einfo - _sinfo) <= 192, \"
-            ERROR(foo.x): Information memory output section is greater than 192 bytes long.
-            Flashing may overwrite important calibration data. The link has stopped as a precaution.
-            \");
             "},
         )
         .unwrap();
