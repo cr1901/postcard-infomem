@@ -7,84 +7,69 @@ preclude using the crate for hosted applications).
 #[macro_export]
 /** Create a `static` variable to hold a serialized [`InfoMem`](../postcard_infomem/struct.InfoMem.html) structure.
 
-This macro can be invoked in one of three ways:
+This macro can be invoked in one of two ways:
 
 * ```ignore
-  include_postcard_infomem!("/path/to/binary/infomem/file", ".linker-section", VAR_NAME);
+  # use postcard_infomem_device::include_postcard_infomem;
+  include_postcard_infomem!("/path/to/binary/infomem/file", generated_module_name);
   ```
 * ```ignore
-  include_postcard_infomem!("/path/to/binary/infomem/file", ".linker-section");
-  ```
-* ```ignore
+  # use postcard_infomem_device::include_postcard_infomem;
   include_postcard_infomem!("/path/to/binary/infomem/file");
   ```
 
-If `".linker-section"` is omitted, it defaults to `".info"`, and if `VAR_NAME` is
-omitted, the `static` variable's name defaults to `INFOMEM`. The `static`
-variable generated will have a type of "the dereferenced return value of
-[`include_bytes`]".
+If `generated_module_name` is omitted, it defaults to `infomem`.
+
+On [Harvard architectures](https://en.wikipedia.org/wiki/Harvard_architecture)
+like AVR, information memory may be stored in a separate address space. Accessing
+information memory as if it was in the same address space for program data would
+lead to a spatial memory safety violation. Therefore, the generated `static`
+cannot be accessed directly. To access the `static` serialized byte array,
+use the generic `generated_module_name::get()`:
+
+`get()` can return a `&[u8]` on most architectures supported by Rust:
+
+```ignore
+# use postcard_infomem_device::include_postcard_infomem;
+#
+include_postcard_infomem!("/path/to/binary/infomem/file");
+let im: &[u8] = infomem::get();
+```
+
+On all supported architectures where [`usize`] is the size of a [`pointer`],
+`get()` can also return a `Range<usize>` suitable for iterating. The start
+and end pointers of the serialized `static` are interpreted as [`usize`]s. These
+will be replaced with an int type guaranteed to be the size of a [`pointer`],
+[eventually](https://github.com/rust-lang/rust/issues/65473):
+
+```ignore
+# use postcard_infomem_device::include_postcard_infomem;
+#
+# fn read_infomem_data(addr)
+# {
+# }
+include_postcard_infomem!("/path/to/binary/infomem/file");
+
+let addrs = infomem::get::<Range<usize>>();
+for a in addrs {
+    println!("{}", read_infomem_data(a))
+}
+```
 
 ## Linker Considerations.
-The macro annotates the `static` variable with the [`used` attribute](https://doc.rust-lang.org/reference/abi.html#the-used-attribute)
+The generated `static` variable is annotated with the [`link_section` attribute](https://doc.rust-lang.org/reference/abi.html#the-link_section-attribute).
+Currently, on all targets except the AVR, the link section is named `.postcard_infomem`.
+On AVR, the link section is named `.eeprom`; _the `avr-gcc` toolchain has special
+logic to place sections named `.eeprom` into EEPROM memory._
+
+This macro also annotates the `static` variable with the [`used` attribute](https://doc.rust-lang.org/reference/abi.html#the-used-attribute)
 so that `rustc` knows not to optimize the variable away if your application
 never reads from it. However, linkers _also_ have a tendency to [garbage-collect](https://sourceware.org/binutils/docs/ld/Input-Section-Keep.html)
-unused symbols unless told not to.
+unused symbols unless told not to. The [`postcard-infomem-host`](../postcard-infomem-host/index.html) crate provides
+functions for build scripts to automate generating these linker fragments for you.
 
-For [GNU `ld`](https://sourceware.org/binutils/docs/ld/)-based linkers, working
-around garbage collection involves overriding the default linker script by passing
-the `-C link-arg=-T/path/to/linker/script/override` [codegen flag](https://doc.rust-lang.org/rustc/codegen-options/index.html#link-arg)
-to `rustc`, and adding a `KEEP(.linker-section)` annotation inside the
-aforementioned linker script override file. An example of an override for
-[msp430g2553](https://docs.rs/msp430g2553/latest/msp430g2553/) might look like:
-
-```text
-MEMORY
-{
-  RAM : ORIGIN = 0x0200, LENGTH = 0x0200
-  INFOMEM : ORIGIN = 0x1000, LENGTH = 0x100
-  ROM : ORIGIN = 0xC000, LENGTH = 0x3FDE
-  VECTORS : ORIGIN = 0xFFE0, LENGTH = 0x20
-}
-
-SECTIONS {
-    .info : {
-      _sinfo = .;
-      KEEP(*(.info))
-      _einfo = .;
-    } > INFOMEM
-}
-
-/* This is a precaution. If you have a way to save the calibration data before
-it's been erased, all 256-2 bytes of information memory can be used. */
-ASSERT((_einfo - _sinfo) <= 192, "
-ERROR(memory.x): Information memory is greater than 192 bytes long. Erasing flash
-to write the information memory would also erase (and possibly overwrite) MSP430Gx2xx
-calibration data.");
-```
-
-If you want to _extend_ a default linker script script, but not completely
-override it, the `INSERT` [annotation](https://sourceware.org/binutils/docs/ld/Miscellaneous-Commands.html)
-can be used _while still passing the `link-arg` codegen flag above._ This is
-useful for appending an [`InfoMem`](../postcard_infomem/struct.InfoMem.html)
-`struct` to the end of your binary's [`.text` section](https://en.wikipedia.org/wiki/Code_segment).
-The below example was tested with [`mingw-w64`](https://www.mingw-w64.org/) and
-a `rustc` targeting the [GNU ABI](https://rust-lang.github.io/rustup/installation/windows.html)
-on Windows:
-
-```text
-SECTIONS {
-    /* Required, otherwise won't be treated as valid Win32 app.. */
-    . = ALIGN(__section_alignment__);
-    .info : {
-      _sinfo = .;
-      KEEP(*(.info))
-      _einfo = .;
-    }
-} INSERT AFTER .text
-```
-
-Complete/working examples of using this macro based on the above can be found
-in the `examples` directory/[crate](https://github.com/cr1901/postcard-infomem/tree/main/examples)
+Complete/working examples of using this macro based on the above can be found in
+the `examples` directory/[crate](https://github.com/cr1901/postcard-infomem/tree/main/examples)
 of this workspace.
 */
 macro_rules! include_postcard_infomem {
@@ -105,11 +90,16 @@ macro_rules! include_postcard_infomem {
             use core::ops::Range;
             use core::slice::from_raw_parts;
 
+            #[cfg(not(doctest))]
             #[cfg_attr(target_arch = "avr", link_section = ".eeprom")]
-            #[cfg_attr(not(target_arch = "avr"), link_section = ".postcard-infomem")]
+            #[cfg_attr(not(target_arch = "avr"), link_section = ".postcard_infomem")]
             #[no_mangle]
             #[used]
             static INFOMEM: [u8; include_bytes!($pim).len()] = *include_bytes!($pim);
+
+            // Doesn't seem to work...
+            #[cfg(doctest)]
+            static INFOMEM: [u8; 7] = b"doctest";
 
             #[doc="Pointer to an infomem struct that is address-space aware.\
             \n\
