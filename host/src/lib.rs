@@ -166,7 +166,7 @@ pub fn generate_from_env<'a>(cfg: EnvConfig) -> Result<InfoMem<'a>, Box<dyn Erro
 
     if cfg.0.contains(EnvConfigFlags::APP_VERSION) {
         // CARGO_PKG_VERSION comes from whatever is running this build script.
-        im.app.version = Some(Version::parse(&env::var("CARGO_PKG_VERSION")?)?);
+        im.app.version = Some(Version::parse(&env::var("CARGO_PKG_VERSION")?)?.try_into()?);
     }
 
     // Similar in spirit to https://github.com/fusion-engineering/rust-git-version,
@@ -198,11 +198,14 @@ pub fn generate_from_env<'a>(cfg: EnvConfig) -> Result<InfoMem<'a>, Box<dyn Erro
         let rv = version_meta()?;
 
         if cfg.0.contains(EnvConfigFlags::RUSTC_VERSION) {
-            im.rustc.version = Some(rv.semver);
+            im.rustc.version = Some(rv.semver.try_into()?);
         }
 
         if cfg.0.contains(EnvConfigFlags::RUSTC_LLVM) {
-            im.rustc.llvm_version = rv.llvm_version.map(|l| Version::new(l.major, l.minor, 0));
+            im.rustc.llvm_version = rv
+                .llvm_version
+                .map(|l| Version::new(l.major, l.minor, 0).try_into())
+                .transpose()?;
         }
 
         if cfg.0.contains(EnvConfigFlags::RUSTC_GIT) {

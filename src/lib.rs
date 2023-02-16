@@ -15,7 +15,6 @@ is placed into the [`user`](InfoMem::user) field of the main [`InfoMem`] struct.
 
 use core::fmt::Debug;
 
-use semver::Version;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
@@ -56,7 +55,7 @@ where
     _It is inadvisable to manually alter this field._ The intent of this field
     is to allow backwards (and possibly forwards) compatibility with older
     (newer) versions of this `struct`. */
-    pub version: Version,
+    pub version: Semver<'a>,
     #[serde(borrow)]
     /// Information about the application where this `struct` originated.
     pub app: AppInfo<'a>,
@@ -95,10 +94,7 @@ where
     are [`Option::None`]. */
     fn default() -> Self {
         InfoMem {
-            // This will panic at compile time. If CARGO_PKG_VERSION fails to
-            // parse at runtime (note that Version::parse is a const fn, and
-            // the unwrap should be infallible), we have much bigger problems.
-            version: Version::parse(env!("CARGO_PKG_VERSION")).unwrap(),
+            version: Semver::this_version(),
             app: Default::default(),
             rustc: Default::default(),
             user: Option::<T>::None,
@@ -132,7 +128,7 @@ pub struct AppInfo<'a> {
     /// Name of the current crate being compiled.
     pub name: Option<InfoStr<'a>>,
     /// [Semantic version](https://semver.org/) (semver) of the current crate being compiled.
-    pub version: Option<Version>,
+    pub version: Option<Semver<'a>>,
     #[serde(borrow)]
     /// Git commit of the source code of the current crate being compiled.
     pub git: Option<InfoStr<'a>>,
@@ -163,11 +159,11 @@ populate this `struct`._
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct RustcInfo<'a> {
     /// [Semantic version](https://semver.org/) (semver) of the `rustc` compiler.
-    pub version: Option<Version>,
+    pub version: Option<Semver<'a>>,
     /** [LLVM](https://llvm.org/) version used by the `rustc` compiler.
 
     _Although treated as a semver, older LLVM versions did not follow semver._ */
-    pub llvm_version: Option<Version>,
+    pub llvm_version: Option<Semver<'a>>,
     /// [Release channel](https://doc.rust-lang.org/book/appendix-07-nightly-rust.html) of the `rustc` compiler.
     pub channel: Option<Channel>,
     #[serde(borrow)]
