@@ -214,7 +214,7 @@ pub fn generate_from_env<'a>(cfg: EnvConfig) -> Result<InfoMem<'a>, Box<dyn Erro
         }
 
         if cfg.0.contains(EnvConfigFlags::RUSTC_CHANNEL) {
-            im.rustc.channel = Some(rv.channel);
+            im.rustc.channel = Some(rv.channel.into());
         }
     }
 

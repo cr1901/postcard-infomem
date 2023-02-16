@@ -15,7 +15,6 @@ is placed into the [`user`](InfoMem::user) field of the main [`InfoMem`] struct.
 
 use core::fmt::Debug;
 
-use rustc_version::Channel;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -25,6 +24,9 @@ pub use infostr::InfoStr;
 
 mod magic;
 pub use magic::*;
+
+mod shim;
+pub use shim::*;
 
 /** Top-level container type for information intended to be embedded in a library
 or binary.
@@ -58,6 +60,7 @@ where
     #[serde(borrow)]
     /// Information about the application where this `struct` originated.
     pub app: AppInfo<'a>,
+    #[serde(borrow)]
     /// Information about the `rustc` compiler used to originally create this `struct`.
     pub rustc: RustcInfo<'a>,
     /** User-specific information to be included "as-is" (either `&[u8]`, `&mut [u8]`, or [`Vec<u8>`]).
@@ -125,6 +128,7 @@ members. _This crate does not attempt to populate this `struct`._
 */
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppInfo<'a> {
+    #[serde(borrow)]
     /// Name of the current crate being compiled.
     pub name: Option<InfoStr<'a>>,
     /// [Semantic version](https://semver.org/) (semver) of the current crate being compiled.
@@ -147,80 +151,6 @@ impl<'a> Default for AppInfo<'a> {
     }
 }
 
-/// Helper types to ease the serialization process for types in external crates.
-mod shim {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    #[derive(Serialize, Deserialize)]
-    /** [`enum`] representing the [release channel](https://doc.rust-lang.org/book/appendix-07-nightly-rust.html),
-    of the `rustc` compiler.
-
-    This enum is created from a [`rustc_version::Channel`] using its [`From`]
-    implementation, and exists mainly to aid in [deriving](https://serde.rs/remote-derive.html)
-    the [`Serialize`] and [`Deserialize`] traits for [`RustcInfo`].
-    */
-    pub enum Channel {
-        /// Development release channel
-        Dev,
-        /// Nightly release channel
-        Nightly,
-        /// Beta release channel
-        Beta,
-        /// Stable release channel
-        Stable,
-    }
-
-    impl From<rustc_version::Channel> for Channel {
-        #[inline]
-        fn from(other: rustc_version::Channel) -> Self {
-            match other {
-                rustc_version::Channel::Dev => Channel::Dev,
-                rustc_version::Channel::Nightly => Channel::Nightly,
-                rustc_version::Channel::Beta => Channel::Beta,
-                rustc_version::Channel::Stable => Channel::Stable,
-            }
-        }
-    }
-
-    impl From<Channel> for rustc_version::Channel {
-        #[inline]
-        fn from(other: Channel) -> rustc_version::Channel {
-            match other {
-                Channel::Dev => rustc_version::Channel::Dev,
-                Channel::Nightly => rustc_version::Channel::Nightly,
-                Channel::Beta => rustc_version::Channel::Beta,
-                Channel::Stable => rustc_version::Channel::Stable,
-            }
-        }
-    }
-
-    /** Module provided to [`serde`]s [`with`](https://serde.rs/remote-derive.html)
-    attribute to implement the [`Serialize`] and [`Deserialize`] traits for
-    the external [`rustc_version::Channel`]  type. */
-    pub mod channel_shim {
-        use super::*;
-
-        /// Shim [`Deserialize`] implementation to deserialize [`rustc_version::Channel`] types.
-        pub fn deserialize<'de, D>(d: D) -> Result<Option<rustc_version::Channel>, D::Error>
-        where
-            D: Deserializer<'de>,
-        {
-            let foreign = <Option<Channel>>::deserialize(d)?;
-            Ok(foreign.map(Into::into))
-        }
-
-        /// Shim [`Serialize`] implementation to serialize [`rustc_version::Channel`] types.
-        pub fn serialize<S>(c: &Option<rustc_version::Channel>, s: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            let c = *c;
-            c.map(<Channel as From<rustc_version::Channel>>::from)
-                .serialize(s)
-        }
-    }
-}
-
 /** Information about the `rustc` compiler used to compile your application and
 its dependencies.
 
@@ -238,12 +168,12 @@ pub struct RustcInfo<'a> {
 
     _Although treated as a semver, older LLVM versions did not follow semver._ */
     pub llvm_version: Option<Version>,
-    #[serde(with = "shim::channel_shim")]
     /// [Release channel](https://doc.rust-lang.org/book/appendix-07-nightly-rust.html) of the `rustc` compiler.
     pub channel: Option<Channel>,
     #[serde(borrow)]
     /// Git commit of the source code used to build the `rustc` compiler.
     pub git: Option<InfoStr<'a>>,
+    #[serde(borrow)]
     /// Host [triple](https://doc.rust-lang.org/cargo/appendix/glossary.html#target) of the `rustc` compiler.
     pub host: Option<InfoStr<'a>>,
 }
