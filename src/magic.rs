@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_magic_ok_header_bad_data() {
-        let bad_data = [b'P', b'I', b'M', 0x80, 0x80, 0x02, 0xff];
+        let bad_data = [b'P', b'I', b'M', 0x80, 0x00, 0x01, 0x00, 0xff];
 
         let err = from_bytes_magic::<&[u8]>(&bad_data).unwrap_err();
 
@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn test_magic_bad_header_bad_data() {
         // Replace 0x00 with 0x80 for a legal header.
-        let bad_data = [b'P', b'I', b'M', 0x00, 0x80, 0x80, 0x02, 0xff];
+        let bad_data = [b'P', b'I', b'M', 0x00, 0x80, 0x00, 0x01, 0x00, 0xff];
         let err = from_bytes_magic::<&[u8]>(&bad_data).unwrap_err();
 
         assert_eq!(err, Error::DeserializeUnexpectedEnd);
