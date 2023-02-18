@@ -12,6 +12,9 @@ doc = false
 cfg-if = "1.0.0"
 postcard-infomem-device = { path = "../device" }
 
+[target.avr-atmega328p.dependencies]
+ruduino = {  git = "https://github.com/avr-rust/ruduino", optional = true, branch = "master" }
+
 [target.msp430-none-elf.dependencies]
 msp430-rt = "0.4.0"
 msp430g2553 = { version = "0.4.0", optional = true, features = [ "rt" ] }

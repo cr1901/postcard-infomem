@@ -1,0 +1,3 @@
+# Cargo versions before 2021-02-23 won't recognize this: https://github.com/rust-lang/cargo/pull/9175
+[env]
+AVR_CPU_FREQUENCY_HZ = "16_000_000"

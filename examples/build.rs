@@ -21,7 +21,7 @@ fn do_linker_tasks_for_target(out: &Path) {
     let (arch, target) = decide_arch_target();
 
     match &*target {
-        _ if env::var("CARGO_CFG_TARGET_OS").unwrap() != "none" => {
+        _ if env::var("CARGO_CFG_TARGET_OS").unwrap() != "none" && env::var("CARGO_CFG_TARGET_OS").unwrap() != "unknown" => {
             generate_infomem_ldscript(out.join("info.x"), HostedConfig::default()).unwrap();
         }
         "msp430g2553" if arch == "msp430" => {
@@ -38,7 +38,10 @@ fn do_linker_tasks_for_target(out: &Path) {
             write_out_memory_x(&out, &target);
             println!("cargo:rustc-link-arg=-Tlink.x");
             println!("cargo:rustc-link-arg=--nmagic");
-        }
+        },
+        "ruduino" if arch == "avr" => {
+            // No linker setup required for avr-gcc.
+        },
         _ => unreachable!(),
     }
 }
@@ -48,13 +51,14 @@ fn decide_arch_target() -> (String, String) {
     let os = env::var("CARGO_CFG_TARGET_OS").unwrap();
 
     // Fast path for non-bare-metal stuff- ignore any features.
-    if os != "none" {
+    if os != "none" && os != "unknown" {
         return (arch, os);
     }
 
     let targets = match &*arch {
         "msp430" => vec!["msp430g2553"],
         "arm" => vec!["rp2040-hal"],
+        "avr" => vec!["ruduino"],
         s => unimplemented!("example is not implemented for arch {}", s),
     };
 
