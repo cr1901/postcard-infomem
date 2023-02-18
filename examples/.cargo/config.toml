@@ -1,3 +1,12 @@
 # Cargo versions before 2021-02-23 won't recognize this: https://github.com/rust-lang/cargo/pull/9175
 [env]
 AVR_CPU_FREQUENCY_HZ = "16_000_000"
+
+[target.'cfg(all(target_arch = "arm", target_os = "none"))']
+runner = "just -f runners.just elf2uf2-rs"
+
+[target.'cfg(target_arch = "avr")']
+runner = "just -f runners.just avrdude"
+
+[target.'cfg(target_arch = "msp430")']
+runner = "just -f runners.just mspdebug"
