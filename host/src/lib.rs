@@ -10,7 +10,7 @@ use std::process::Command;
 
 use bitflags::bitflags;
 use postcard::to_stdvec;
-use postcard_infomem::{to_stdvec_magic, InfoMem};
+use postcard_infomem::{to_stdvec_magic, InfoMem, Semver};
 use rustc_version::version_meta;
 use semver::Version;
 use time::OffsetDateTime;
@@ -198,7 +198,9 @@ pub fn generate_from_env<'a>(cfg: EnvConfig) -> Result<InfoMem<'a>, Box<dyn Erro
         let rv = version_meta()?;
 
         if cfg.0.contains(EnvConfigFlags::RUSTC_VERSION) {
-            im.rustc.version = Some(rv.semver.try_into()?);
+            let mut sv: Semver = rv.semver.try_into()?;
+            sv.pre = None; //"-nightly", etc is already encoded in the Channel field.
+            im.rustc.version = Some(sv);
         }
 
         if cfg.0.contains(EnvConfigFlags::RUSTC_LLVM) {
