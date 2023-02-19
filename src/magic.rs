@@ -11,7 +11,7 @@ pub use ser::to_allocvec_magic;
 #[cfg(feature = "std")]
 pub use ser::to_allocvec_magic as to_stdvec_magic;
 
-pub mod ser {
+pub(crate) mod ser {
     /*! Serialization methods and traits for serializing [`InfoMem`] to the
     [`postcard`] wire format.
     */
@@ -24,6 +24,9 @@ pub mod ser {
 
     #[cfg(feature = "alloc")]
     use postcard::ser_flavors::AllocVec;
+
+    #[cfg(feature = "std")]
+    pub use to_allocvec_magic as to_stdvec_magic;
 
     /** Serialize [`InfoMem`] into a [`slice`] with a magic constant header.
 
@@ -99,7 +102,7 @@ pub mod ser {
     }
 }
 
-pub mod de {
+pub(crate) mod de {
     /*! Deserialization methods and traits for deserializing [`InfoMem`] from
     the [`postcard`] wire format.
     */
@@ -226,7 +229,7 @@ pub mod de {
 
 #[cfg(test)]
 mod tests {
-    use crate::de::from_bytes_magic;
+    use crate::from_bytes_magic;
     use crate::{to_stdvec_magic, InfoMem};
     use postcard::Error;
 

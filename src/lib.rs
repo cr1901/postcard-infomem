@@ -24,8 +24,21 @@ pub use infostr::InfoStr;
 mod magic;
 pub use magic::*;
 
+mod seq;
+pub use seq::{from_seq, from_seq_magic, ReadSingle, ReadSingleError};
+
 mod shim;
 pub use shim::*;
+
+pub mod de {
+    pub use super::magic::de::Magic;
+    // Everything under seq is for deserialization.
+    pub use super::seq::Seq;
+}
+
+pub mod ser {
+    pub use super::magic::ser::Magic;
+}
 
 /** Top-level container type for information intended to be embedded in a library
 or binary.
