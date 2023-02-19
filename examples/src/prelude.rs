@@ -1,5 +1,22 @@
-use cfg_if::cfg_if;
+pub use cfg_if::cfg_if;
 
+pub use core::fmt;
+pub use core::ops::Range;
+
+// No OS (embedded apps) vs OS
+cfg_if! {
+    if #[cfg(any(target_os = "none", target_os = "unknown"))] {
+        pub use core::fmt::write;
+        pub use core::fmt::Write;
+        pub use core::convert::Infallible;
+        pub use postcard_infomem::{ReadSingle, ReadSingleError};
+    } else {
+        pub use std::io;
+        pub use std::io::Write;
+    }
+}
+
+// For No OS, target-specific imports.
 cfg_if! {
     if #[cfg(feature = "msp430g2553")] {
         extern crate panic_msp430;
@@ -18,8 +35,6 @@ cfg_if! {
         #[used]
         pub static BOOT2_FIRMWARE: [u8; 256] = rp2040_boot2::BOOT_LOADER_GD25Q64CS;
     } else if #[cfg(feature = "ruduino")] {
-        pub use core::ops::Range;
-
         pub use ruduino;
         pub use ruduino::cores::current::{port, EEAR, EECR, EEDR};
         pub use ruduino::legacy::serial;
@@ -54,6 +69,7 @@ pub extern "C" fn main() {
     loop {}
 }
 
+// May be required in general, putting here just in case...
 #[no_mangle]
 extern "C" fn abort() -> ! {
     panic!();

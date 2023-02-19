@@ -13,6 +13,9 @@ cfg-if = "1.0.0"
 postcard-infomem-device = { path = "../device" }
 postcard-infomem = { path = ".." }
 
+[target.'cfg(any(target_os = "none", target_os = "unknown"))'.dependencies]
+embedded-hal = "=1.0.0-alpha.9"
+
 [target.avr-atmega328p.dependencies]
 ruduino = {  git = "https://github.com/avr-rust/ruduino", optional = true, branch = "master" }
 

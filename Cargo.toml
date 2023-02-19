@@ -22,3 +22,9 @@ alloc = ["postcard/alloc", "dep:semver"]
 
 [workspace]
 members = [ "device", "examples", "host" ]
+
+[profile.examples]
+inherits = "release"
+lto = "fat"
+opt-level = "s"
+codegen-units = 1
