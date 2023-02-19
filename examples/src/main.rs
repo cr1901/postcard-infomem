@@ -1,46 +1,50 @@
 #![cfg_attr(any(target_os = "none", target_os = "unknown"), no_std)]
 #![cfg_attr(any(target_os = "none", target_os = "unknown"), no_main)]
 
-use cfg_if::cfg_if;
+mod prelude;
+// use prelude::Error;
+mod hal;
+use hal::*;
 
-cfg_if! {
-    if #[cfg(feature = "msp430g2553")] {
-        extern crate panic_msp430;
-        use msp430_rt::entry;
+use core::ops::Range;
 
-        #[allow(unused)]
-        use msp430g2553::interrupt;
-    } else if #[cfg(feature = "rp2040-hal")] {
-        extern crate panic_halt;
-        use rp2040_hal::entry;
-
-        /// The linker will place this boot block at the start of our program image. We
-        /// need this to help the ROM bootloader get our code up and running.
-        #[link_section = ".boot2"]
-        #[no_mangle]
-        #[used]
-        pub static BOOT2_FIRMWARE: [u8; 256] = rp2040_boot2::BOOT_LOADER_GD25Q64CS;
-    } else if #[cfg(feature = "ruduino")] {
-        use ruduino;
-    }
-}
+use postcard_infomem::{InfoMem, de::Magic, from_seq_magic};
 
 use postcard_infomem_device::include_postcard_infomem;
 include_postcard_infomem!(concat!(env!("OUT_DIR"), "/info.bin"));
 
-#[cfg(not(feature = "ruduino"))]
-#[cfg_attr(any(feature = "msp430g2553", feature = "rp2040-hal"), entry)]
-fn main() -> ! {
-    loop {}
+/* On hosted archs, this is the actual main() function. But on embedded apps
+without an OS (`no_main`), this main() is called by the true main() function.
+See prelude module. */
+fn main() {
+    output_init();
+
+    let mut buf = [0; 128];
+
+    write("\r\ncontents\r\n");
+    
+    for data in mk_reader(infomem::get()) {
+        write_hex(data.unwrap());
+    }
+
+    write("\r\ndeserialize\r\n");
+
+    let im_reader = mk_reader(infomem::get());
+
+    match from_seq_magic::<_, _, &[u8]>(im_reader, &mut buf) {
+        Ok(im) => {
+            write("\r\nokay\r\n");
+        }
+        Err(e) => {
+            write("\r\nerror: ");
+            write_hex(e as u8);
+            write("\r\n");
+        }
+    }
+
+    // for data in im_reader {
+    //     write(data.unwrap());
+    // }
+    // let im = from_bytes_magic(s).unwrap()
 }
 
-#[cfg(feature = "ruduino")]
-#[no_mangle]
-pub extern "C" fn main() {
-    loop {}
-}
-
-#[no_mangle]
-extern "C" fn abort() -> ! {
-    panic!();
-}

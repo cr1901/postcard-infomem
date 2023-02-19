@@ -5,6 +5,7 @@ use super::*;
 use postcard::de_flavors::Flavor;
 use postcard::{Deserializer, Error, Result};
 
+#[derive(Debug, Clone, Copy)]
 pub struct ReadSingleError;
 
 pub trait ReadSingle {
@@ -22,35 +23,37 @@ impl<'de> ReadSingle for &'de [u8] {
 
 pub struct Seq<R, S> {
     src: R,
-    buf: S
+    buf: S,
 }
 
 impl<R, S> Seq<R, S> {
     pub fn new(src: R, buf: S) -> Self {
-        Self {
-            src,
-            buf
-        }
+        Self { src, buf }
     }
 }
 
-impl<'buf, R> Flavor<'buf> for Seq<R, &'buf mut [u8]> where R: ReadSingle + 'buf {
+impl<'buf, R> Flavor<'buf> for Seq<R, &'buf mut [u8]>
+where
+    R: ReadSingle + 'buf,
+{
     type Remainder = &'buf [u8];
     type Source = &'buf [u8];
 
     fn pop(&mut self) -> postcard::Result<u8> {
-        self.src.read_single().map_err(|_| Error::DeserializeUnexpectedEnd)
+        self.src
+            .read_single()
+            .map_err(|_| Error::DeserializeUnexpectedEnd)
     }
 
     fn try_take_n(&mut self, ct: usize) -> postcard::Result<&'buf [u8]> {
         if ct > self.buf.len() {
             // this is the wrong error
-            return Err(postcard::Error::DeserializeUnexpectedEnd)
+            return Err(postcard::Error::DeserializeUnexpectedEnd);
         }
 
         /* Thanks jamesmunns... still no idea why this take is required, but it
         works!
-        
+
         https://gist.github.com/jamesmunns/de99d22c7dbfd0e47f8ac87e0c1a8872
         */
         let remain = core::mem::take(&mut self.buf);
@@ -75,7 +78,7 @@ pub fn from_seq_magic<'buf, R, S, T>(src: R, buf: S) -> Result<InfoMem<'buf, T>>
 where
     Seq<R, S>: Flavor<'buf>,
     T: sealed::Sealed + Deserialize<'buf>,
-    R: ReadSingle + 'buf
+    R: ReadSingle + 'buf,
 {
     let seq = Seq::new(src, buf);
     let magic = de::Magic::try_new(seq)?;
@@ -87,7 +90,7 @@ pub fn from_seq<'buf, R, S, T>(src: R, buf: S) -> Result<InfoMem<'buf, T>>
 where
     Seq<R, S>: Flavor<'buf>,
     T: sealed::Sealed + Deserialize<'buf>,
-    R: ReadSingle + 'buf
+    R: ReadSingle + 'buf,
 {
     let seq = Seq::new(src, buf);
     let mut de_seq = Deserializer::from_flavor(seq);
@@ -119,7 +122,9 @@ mod tests {
 
         let mut buf = [0; 5];
         let ser = to_stdvec_magic(&im).unwrap();
-        let err = from_seq_magic::<_,_,&[u8]>(&*ser, &mut buf).unwrap_err();
+        let err =
+            from_seq_magic::<_, _, &[u8]>(&*ser, &mut buf)
+                .unwrap_err();
 
         assert_eq!(err, Error::DeserializeUnexpectedEnd);
     }
