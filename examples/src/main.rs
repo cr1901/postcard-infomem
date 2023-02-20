@@ -3,13 +3,39 @@
 
 mod prelude;
 use prelude::*;
+#[allow(unused_imports)]
+use prelude::osal::*;
 
 mod hal;
+#[allow(unused_imports)]
 use hal::*;
+
+mod osal;
+use osal::*;
 
 use postcard_infomem::from_seq_magic;
 
 include_postcard_infomem!(concat!(env!("OUT_DIR"), "/info.bin"));
+
+pub struct Ascii(u8);
+
+impl From<u8> for Ascii {
+    fn from(value: u8) -> Self {
+        Self(value)
+    }
+}
+
+impl fmt::Display for Ascii {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.0 < 0x20 || self.0 > 127 {
+            write!(f, "\\x{:02X}", self.0)?;
+        } else {
+            write!(f, "{}", self.0 as char)?;
+        }
+
+        Ok(())
+    }
+}
 
 /* On hosted archs, this is the actual main() function. But on embedded apps
 without an OS (`no_main`), this main() is called by the true main() function.
