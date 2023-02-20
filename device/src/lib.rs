@@ -5,8 +5,8 @@ preclude using the crate for hosted applications).
 #![no_std]
 
 use core::iter::Copied;
-use core::{ops, slice};
 use core::slice::from_raw_parts;
+use core::{ops, slice};
 
 use postcard_infomem::{ReadSingle, ReadSingleError};
 
@@ -92,7 +92,7 @@ macro_rules! include_postcard_infomem {
 
         We turn on no_mangle because multiple INFOMEMs are not
         supported at this time. */
-        pub mod $mod {            
+        pub mod $mod {
             #[cfg(not(doctest))]
             #[cfg_attr(target_arch = "avr", link_section = ".eeprom")]
             #[cfg_attr(not(target_arch = "avr"), link_section = ".postcard_infomem")]
@@ -104,7 +104,7 @@ macro_rules! include_postcard_infomem {
             #[cfg(doctest)]
             static INFOMEM: [u8; 7] = b"doctest";
 
-            #[doc="Access information memory safely, depending on target.\
+            #[doc = "Access information memory safely, depending on target.\
             \n\
             This can be used as a portable entry point to access the `INFOMEM`
             `static` on targets with one or multiple address spaces.\n\
@@ -113,7 +113,10 @@ macro_rules! include_postcard_infomem {
             `static`. On all targets, [`From<Ptr>`] is defined for [`Range<usize>`], \
             which can iterate over `usize`s representing each address used by \
             the `INFOMEM` `struct`."]
-            pub fn get<T>() -> T where T: From<$crate::Ptr> {
+            pub fn get<T>() -> T
+            where
+                T: From<$crate::Ptr>,
+            {
                 // SAFETY: `Ptr` is derived from a static array with known length.
                 unsafe { $crate::Ptr::new(INFOMEM.as_ptr(), INFOMEM.len()).into() }
             }
@@ -133,7 +136,7 @@ pub struct Ptr(*const u8, usize);
 
 impl Ptr {
     /** Create a [`Ptr`] to an `INFOMEM` `static`.
-    
+
     ## Safety
 
     Due to publicly-available [`From`] impls, the pointer needs to
@@ -212,7 +215,7 @@ impl From<Ptr> for Range {
     fn from(value: Ptr) -> Self {
         Self(ops::Range {
             start: value.0 as usize,
-            end: value.0 as usize + value.1
+            end: value.0 as usize + value.1,
         })
     }
 }

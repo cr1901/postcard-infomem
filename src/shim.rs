@@ -66,7 +66,7 @@ pub struct Semver<'a> {
     #[serde(borrow)]
     pub pre: Option<InfoStr<'a>>,
     #[serde(borrow)]
-    pub build: Option<InfoStr<'a>>
+    pub build: Option<InfoStr<'a>>,
 }
 
 impl<'a> Semver<'a> {
@@ -76,11 +76,10 @@ impl<'a> Semver<'a> {
             minor: PIM_VERSION_MINOR,
             patch: PIM_VERSION_PATCH,
             pre: PIM_VERSION_PRE,
-            build: None
+            build: None,
         }
     }
 }
-
 
 #[derive(Debug, Clone, Copy)]
 pub struct TryFromVersionError(&'static str);
@@ -99,18 +98,21 @@ impl<'a> TryFrom<semver::Version> for Semver<'a> {
     type Error = TryFromVersionError;
 
     fn try_from(value: semver::Version) -> Result<Self, Self::Error> {
-        let major = usize::try_from(value.major).map_err(|_| TryFromVersionError("semver major version exceeds usize"))?;
-        let minor = usize::try_from(value.minor).map_err(|_| TryFromVersionError("semver minor version exceeds usize"))?;
-        let patch = usize::try_from(value.patch).map_err(|_| TryFromVersionError("semver patch version exceeds usize"))?;
+        let major = usize::try_from(value.major)
+            .map_err(|_| TryFromVersionError("semver major version exceeds usize"))?;
+        let minor = usize::try_from(value.minor)
+            .map_err(|_| TryFromVersionError("semver minor version exceeds usize"))?;
+        let patch = usize::try_from(value.patch)
+            .map_err(|_| TryFromVersionError("semver patch version exceeds usize"))?;
 
         let pre = match value.pre.as_str() {
             "" => None,
-            s => Some(InfoStr::Owned(s.to_string()))
+            s => Some(InfoStr::Owned(s.to_string())),
         };
 
         let build = match value.build.as_str() {
             "" => None,
-            s => Some(InfoStr::Owned(s.to_string()))
+            s => Some(InfoStr::Owned(s.to_string())),
         };
 
         Ok(Self {
@@ -118,7 +120,7 @@ impl<'a> TryFrom<semver::Version> for Semver<'a> {
             minor,
             patch,
             pre,
-            build
+            build,
         })
     }
 }

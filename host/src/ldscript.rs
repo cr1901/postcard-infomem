@@ -47,9 +47,7 @@ impl<'a> BareSectionConfig<'a> {
 
 impl<'a> Default for BareSectionConfig<'a> {
     fn default() -> Self {
-        Self {
-            region: "INFOMEM",
-        }
+        Self { region: "INFOMEM" }
     }
 }
 
@@ -105,15 +103,11 @@ impl<'a> From<BareAppendConfig<'a>> for LdConfig<'a> {
     }
 }
 
-pub struct HostedConfig {
-
-}
+pub struct HostedConfig {}
 
 impl<'a> Default for HostedConfig {
     fn default() -> Self {
-        Self {
-            
-        }
+        Self {}
     }
 }
 

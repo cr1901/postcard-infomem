@@ -122,9 +122,7 @@ mod tests {
 
         let mut buf = [0; 5];
         let ser = to_stdvec_magic(&im).unwrap();
-        let err =
-            from_seq_magic::<_, _, &[u8]>(&*ser, &mut buf)
-                .unwrap_err();
+        let err = from_seq_magic::<_, _, &[u8]>(&*ser, &mut buf).unwrap_err();
 
         assert_eq!(err, Error::DeserializeUnexpectedEnd);
     }

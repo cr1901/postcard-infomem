@@ -24,7 +24,7 @@ impl fmt::Display for Ascii {
     }
 }
 
-cfg_if!{
+cfg_if! {
     if #[cfg(any(target_os = "none", target_os="unknown"))] {
         use embedded_hal as ehal;
 
@@ -47,7 +47,7 @@ cfg_if!{
     }
 }
 
-cfg_if!{
+cfg_if! {
     if #[cfg(feature = "ruduino")] {
         #[derive(Clone)]
         pub struct EepromReader(Range);
@@ -122,7 +122,7 @@ cfg_if!{
         }
 
         pub fn mk_reader(infomem: Range) -> impl ReadSingle + IntoIterator<Item = u8> + Clone {
-            EepromReader(infomem) 
+            EepromReader(infomem)
         }
     }
 }

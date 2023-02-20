@@ -21,7 +21,9 @@ fn do_linker_tasks_for_target(out: &Path) {
     let (arch, target) = decide_arch_target();
 
     match &*target {
-        _ if env::var("CARGO_CFG_TARGET_OS").unwrap() != "none" && env::var("CARGO_CFG_TARGET_OS").unwrap() != "unknown" => {
+        _ if env::var("CARGO_CFG_TARGET_OS").unwrap() != "none"
+            && env::var("CARGO_CFG_TARGET_OS").unwrap() != "unknown" =>
+        {
             generate_infomem_ldscript(out.join("info.x"), HostedConfig::default()).unwrap();
         }
         "msp430g2553" if arch == "msp430" => {
@@ -38,10 +40,10 @@ fn do_linker_tasks_for_target(out: &Path) {
             write_out_memory_x(&out, &target);
             println!("cargo:rustc-link-arg=-Tlink.x");
             println!("cargo:rustc-link-arg=--nmagic");
-        },
+        }
         "ruduino" if arch == "avr" => {
             // No linker setup required for avr-gcc.
-        },
+        }
         _ => unreachable!(),
     }
 }
