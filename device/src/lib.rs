@@ -207,9 +207,42 @@ on Harvard architectures, one can iterate over the range of addresses used
 for the `INFOMEM` `struct` instead. The addresses are represented as [`usize`]s.
 
 This type is intended to be used as part of an [`Iterator`] adapter, to access
-the `INFOMEM` in a platform-specific manner. */
+the `INFOMEM` in a platform-specific manner. See [`read_single`]. */
 #[derive(Clone)]
 pub struct Range(ops::Range<usize>);
+
+impl Range {
+    /** Create an adapter from [`Range`] to `INFOMEM` `u8` that implements
+    [`ReadSingle`] and [`Iterator`].
+    
+    [`Range`] by itself returns [`usize`]s that represent addresses. The user
+    takes addresses supplied by [`Range`] to access `INFOMEM` in a platform
+    specific manner. For instance, the following two loops which print the
+    contents of `INFOMEM` as [`UpperHex`] are equivalent:
+
+    ```ignore
+    for data in infomem::get::<Range>().read_single(|addr| {
+        // SAFTEY: we have to opt into unsafety to create a Range,
+        // a range provided by include_postcard_infomem macro will be
+        // safe to dereference over all `usize`s passed to this closure.
+        Ok(unsafe { *(addr as *const u8) })
+    }) {
+        write!(w, "{:X}", data).unwrap();
+    }
+    ```
+
+    ```ignore
+    for data in infomem::get::<Slice>() {
+        write!(w, "{:X}", data).unwrap();
+    }
+    ``` */
+    pub fn read_single<F>(self, f: F) -> RangeReadSingle<F> where F: FnMut(usize) -> Result<u8, ReadSingleError> {
+        RangeReadSingle {
+            range: self,
+            f
+        }
+    }
+}
 
 impl From<Ptr> for Range {
     fn from(value: Ptr) -> Self {
@@ -228,5 +261,59 @@ impl Iterator for Range {
     }
 }
 
+/* `struct` which maps [`usize`] addresses to `INFOMEM` contents outside of
+the data address space.
+
+This `struct` is a convenience to avoid the need to create unique types
+for each platform that implement the [`ReadSingle`] trait. It also implements
+[`Iterator`] for parity with [`Slice`]; errors are mapped to [`None`] when
+used as an iterator.
+*/
+#[derive(Clone)]
+pub struct RangeReadSingle<F> {
+    range: Range,
+    f: F
+}
+
+impl<F> ReadSingle for RangeReadSingle<F> where F: FnMut(usize) -> Result<u8, ReadSingleError> {
+    fn read_single(&mut self) -> Result<u8, ReadSingleError> {
+        let addr = self.range.next().ok_or(ReadSingleError)?;
+        (self.f)(addr)
+    }
+}
+
+impl<F> Iterator for RangeReadSingle<F> where F: FnMut(usize) -> Result<u8, ReadSingleError> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let addr = self.range.next()?;
+        (self.f)(addr).ok()
+    }
+}
+
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use postcard_infomem::{InfoMem, to_stdvec_magic};
+
+    extern crate std;
+    use std::vec::Vec;
+
+    #[test]
+    fn test_range_read_single_slice_equiv() {
+        let im_ser = to_stdvec_magic(&InfoMem::<&[u8]>::default()).unwrap().leak();
+
+        // Safety- We just created the vec and leaked it to make it 'static!
+        let slice: Slice = unsafe { Ptr::new(im_ser.as_ptr(), im_ser.len()) }.into();
+        let range: Range = unsafe { Ptr::new(im_ser.as_ptr(), im_ser.len()) }.into();
+
+        let collected_slice = slice.into_iter().collect::<Vec<u8>>();
+
+        // Safety: We have full control over this allocation and know its good.
+        let collected_range: Vec<u8> = range.read_single(|addr| {
+            Ok(unsafe { *(addr as *const u8) })
+        }).collect::<Vec<u8>>();
+
+        assert_eq!(collected_slice, collected_range);
+    }
+}

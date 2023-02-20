@@ -49,39 +49,6 @@ cfg_if! {
 
 cfg_if! {
     if #[cfg(feature = "ruduino")] {
-        #[derive(Clone)]
-        pub struct EepromReader(Range);
-
-        impl ReadSingle for EepromReader {
-            fn read_single(&mut self) -> Result<u8, ReadSingleError> {
-                while EECR::is_set(EECR::EEPE) {}
-                EEAR::write(self.0.next().ok_or(ReadSingleError)? as u16);
-                EECR::set(EECR::EERE);
-
-                Ok(EEDR::read())
-            }
-        }
-
-        // Bad... why?
-        // impl ReadSingle for EepromReader {
-        //     fn read_single(&mut self) -> Result<u8, ReadSingleError> {
-        //         let data = self.next().ok_or(ReadSingleError)?;
-        //         Ok(data.unwrap())
-        //     }
-        // }
-
-        impl Iterator for EepromReader {
-            type Item = u8;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                while EECR::is_set(EECR::EEPE) {}
-                EEAR::write(self.0.next()? as u16);
-                EECR::set(EECR::EERE);
-
-                Some(EEDR::read())
-            }
-        }
-
         pub struct Serial(());
 
         impl Serial {
@@ -122,7 +89,13 @@ cfg_if! {
         }
 
         pub fn mk_reader(infomem: Range) -> impl ReadSingle + IntoIterator<Item = u8> + Clone {
-            EepromReader(infomem)
+            infomem.read_single(|addr| {
+                while EECR::is_set(EECR::EEPE) {}
+                EEAR::write(addr as u16);
+                EECR::set(EECR::EERE);
+
+                Ok(EEDR::read())
+            })
         }
     }
 }
