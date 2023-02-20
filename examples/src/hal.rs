@@ -41,7 +41,7 @@ cfg_if!{
             io::stdout()
         }
 
-        pub fn mk_reader(infomem: &'static [u8]) -> &'static [u8] {
+        pub fn mk_reader(infomem: Slice) -> impl ReadSingle + IntoIterator<Item = u8> + Clone {
             infomem
         }
     }
@@ -49,7 +49,8 @@ cfg_if!{
 
 cfg_if!{
     if #[cfg(feature = "ruduino")] {
-        pub struct EepromReader(Range<usize>);
+        #[derive(Clone)]
+        pub struct EepromReader(Range);
 
         impl ReadSingle for EepromReader {
             fn read_single(&mut self) -> Result<u8, ReadSingleError> {
@@ -120,7 +121,7 @@ cfg_if!{
             Serial::new()
         }
 
-        pub fn mk_reader(infomem: Range<usize>) -> impl ReadSingle + IntoIterator<Item = u8> {
+        pub fn mk_reader(infomem: Range) -> impl ReadSingle + IntoIterator<Item = u8> + Clone {
             EepromReader(infomem) 
         }
     }

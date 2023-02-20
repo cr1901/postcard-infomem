@@ -1,7 +1,10 @@
 pub use cfg_if::cfg_if;
 
 pub use core::fmt;
-pub use core::ops::Range;
+pub use core::ops;
+
+pub use postcard_infomem::{ReadSingle, ReadSingleError};
+pub use postcard_infomem_device::*;
 
 // No OS (embedded apps) vs OS
 cfg_if! {
@@ -9,7 +12,6 @@ cfg_if! {
         pub use core::fmt::write;
         pub use core::fmt::Write;
         pub use core::convert::Infallible;
-        pub use postcard_infomem::{ReadSingle, ReadSingleError};
     } else {
         pub use std::io;
         pub use std::io::Write;

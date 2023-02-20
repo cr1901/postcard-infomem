@@ -9,7 +9,6 @@ use hal::*;
 
 use postcard_infomem::from_seq_magic;
 
-use postcard_infomem_device::include_postcard_infomem;
 include_postcard_infomem!(concat!(env!("OUT_DIR"), "/info.bin"));
 
 /* On hosted archs, this is the actual main() function. But on embedded apps
@@ -19,23 +18,19 @@ fn main() {
     let mut w = mk_writer();
     #[cfg(any(target_os = "none", target_os = "unknown"))]
     let w: &mut dyn OurCoreWrite<Error = _> = &mut w;
+    let r = mk_reader(infomem::get());
 
     let mut buf = [0; 128];
 
     write!(w, "\r\nDumping infomem contents...\r\n").unwrap();
-    
-    for data in mk_reader(infomem::get()) {
-        #[cfg(any(target_os = "none", target_os = "unknown"))]
+
+    for data in r.clone() {
         write!(w, "{}", Ascii::from(data)).unwrap();
-        #[cfg(all(not(target_os = "none"), not(target_os="unknown")))]
-        write!(w, "{}", Ascii::from(*data)).unwrap();
     }
 
     write!(w, "\r\n\r\nDeserializing infomem... ").unwrap();
 
-    let im_reader = mk_reader(infomem::get());
-
-    match from_seq_magic::<_, _, &[u8]>(im_reader, &mut buf) {
+    match from_seq_magic::<_, _, &[u8]>(r.clone(), &mut buf) {
         Ok(_im) => {
             write!(w, "Okay!\r\n").unwrap();
         }
@@ -44,4 +39,3 @@ fn main() {
         }
     }
 }
-

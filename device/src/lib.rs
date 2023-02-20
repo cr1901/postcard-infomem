@@ -4,6 +4,12 @@ preclude using the crate for hosted applications).
 */
 #![no_std]
 
+use core::iter::Copied;
+use core::{ops, slice};
+use core::slice::from_raw_parts;
+
+use postcard_infomem::{ReadSingle, ReadSingleError};
+
 #[macro_export]
 /** Create a `static` variable to hold a serialized [`InfoMem`](../postcard_infomem/struct.InfoMem.html) structure.
 
@@ -86,10 +92,7 @@ macro_rules! include_postcard_infomem {
 
         We turn on no_mangle because multiple INFOMEMs are not
         supported at this time. */
-        pub mod $mod {
-            use core::ops::Range;
-            use core::slice::from_raw_parts;
-
+        pub mod $mod {            
             #[cfg(not(doctest))]
             #[cfg_attr(target_arch = "avr", link_section = ".eeprom")]
             #[cfg_attr(not(target_arch = "avr"), link_section = ".postcard_infomem")]
@@ -101,47 +104,125 @@ macro_rules! include_postcard_infomem {
             #[cfg(doctest)]
             static INFOMEM: [u8; 7] = b"doctest";
 
-            #[doc="Pointer to an infomem struct that is address-space aware.\
-            \n\
-            The [`Ptr`] struct is a wrapper over a pointer that can be used as \
-            a portable type to access the `INFOMEM` `static` on targets with one or \
-            multiple address spaces. \
-            \n\
-            It is meant to be immediately converted to another, more ergonomic type for \
-            your environment."]
-            pub struct Ptr(*const u8, usize);
-
-            #[doc="Access information memory safely, depending on target. \
+            #[doc="Access information memory safely, depending on target.\
             \n\
             This can be used as a portable entry point to access the `INFOMEM`
             `static` on targets with one or multiple address spaces.\n\
-            On most targets, [`From<Ptr>`] will be defined for &[u8], which points \
-            to the `INFOMEM` `static`. On all targets, [`From<Ptr>`] is defined for \
-            [`Range<usize>`], which can iterate over `usize`s representing each address \
-            used by the `INFOMEM` `struct`."]
-            pub fn get<T>() -> T where T: From<Ptr> {
-                Ptr(INFOMEM.as_ptr(), INFOMEM.len()).into()
-            }
-
-            #[cfg(not(target_arch = "avr"))]
-            impl From<Ptr> for &[u8] {
-                fn from(value: Ptr) -> Self {
-                    // SAFETY: Ptrs can only be created within this module.
-                    // It is derived from a static array with known length.
-                    unsafe { from_raw_parts(value.0, value.1) }
-                }
-            }
-
-            impl From<Ptr> for Range<usize> {
-                fn from(value: Ptr) -> Self {
-                    Range {
-                        start: value.0 as usize,
-                        end: value.0 as usize + value.1
-                    }
-                }
+            On most targets, [`From<Ptr>`] will be defined for [`Slice`], which \
+            is a wrapper over a &'static [u8] which contains the `INFOMEM` \
+            `static`. On all targets, [`From<Ptr>`] is defined for [`Range<usize>`], \
+            which can iterate over `usize`s representing each address used by \
+            the `INFOMEM` `struct`."]
+            pub fn get<T>() -> T where T: From<$crate::Ptr> {
+                // SAFETY: `Ptr` is derived from a static array with known length.
+                unsafe { $crate::Ptr::new(INFOMEM.as_ptr(), INFOMEM.len()).into() }
             }
         }
     };
+}
+
+/** Pointer to an infomem struct that is address-space aware.
+
+The [`Ptr`] `struct` is a wrapper over a pointer that can be used as
+a portable type to access the `INFOMEM` `static` on targets with one or
+multiple address spaces.
+
+It is meant to be immediately converted to another, more ergonomic type for
+your environment. */
+pub struct Ptr(*const u8, usize);
+
+impl Ptr {
+    /** Create a [`Ptr`] to an `INFOMEM` `static`.
+    
+    ## Safety
+
+    Due to publicly-available [`From`] impls, the pointer needs to
+    point to a valid memory block that's _not_ currently mutably borrowed.
+    Otherwise, Undefined Behavior may occur when [`Ptr`] is converted.
+
+    [`include_postcard_infomem`] takes care of safely creating a [`Ptr`] for you.
+    */
+    pub unsafe fn new(ptr: *const u8, len: usize) -> Self {
+        Ptr(ptr, len)
+    }
+}
+
+#[cfg(not(target_arch = "avr"))]
+impl From<Ptr> for Slice {
+    fn from(value: Ptr) -> Self {
+        // SAFETY: You have already opted into `unsafe` to create
+        // a `Ptr`, and are upholding `Ptr`s invariants before
+        // doing the conversion.
+        Self(unsafe { from_raw_parts(value.0, value.1) })
+    }
+}
+
+/** Newtype over a `'static` reference to `INFOMEM`.
+
+[`Slice`] is returned by `infomem::get` on most architectures, where
+the `INFOMEM` static can be accessed safely. A newtype is used
+instead of returning the `&'static [u8]` directly so that conditionally
+compiled code operating on [`Slice`] can have the same structure
+regardless of whether the architecture uses [`Slice`] or [`Range`]
+to access `INFOMEM`.
+
+In particular, [`Slice`] and adapters that consume [`Range`] will
+create iterators over `u8`, while `&'static [u8]` creates an iterator
+over `&u8`. */
+#[derive(Clone, Copy)]
+#[cfg(not(target_arch = "avr"))]
+pub struct Slice(&'static [u8]);
+
+#[cfg(not(target_arch = "avr"))]
+impl From<Slice> for &'static [u8] {
+    fn from(value: Slice) -> Self {
+        value.0
+    }
+}
+
+#[cfg(not(target_arch = "avr"))]
+impl IntoIterator for Slice {
+    type Item = u8;
+    type IntoIter = Copied<slice::Iter<'static, u8>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter().copied()
+    }
+}
+
+#[cfg(not(target_arch = "avr"))]
+impl ReadSingle for Slice {
+    fn read_single(&mut self) -> Result<u8, ReadSingleError> {
+        self.0.read_single()
+    }
+}
+
+/** Newtype over a `Range` of `INFOMEM` addresses.
+
+When a reference to an `INFOMEM` `struct` cannot be safely returned, such as
+on Harvard architectures, one can iterate over the range of addresses used
+for the `INFOMEM` `struct` instead. The addresses are represented as [`usize`]s.
+
+This type is intended to be used as part of an [`Iterator`] adapter, to access
+the `INFOMEM` in a platform-specific manner. */
+#[derive(Clone)]
+pub struct Range(ops::Range<usize>);
+
+impl From<Ptr> for Range {
+    fn from(value: Ptr) -> Self {
+        Self(ops::Range {
+            start: value.0 as usize,
+            end: value.0 as usize + value.1
+        })
+    }
+}
+
+impl Iterator for Range {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
 }
 
 #[cfg(test)]
