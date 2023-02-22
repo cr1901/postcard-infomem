@@ -16,6 +16,11 @@ pub(crate) mod ser {
     [`postcard`] wire format.
     */
 
+    #[cfg(all(not(feature = "std"), feature = "alloc"))]
+    extern crate alloc;
+    #[cfg(all(not(feature = "std"), feature = "alloc"))]
+    use alloc::vec::Vec;
+
     use crate::*;
     use core::ops::IndexMut;
     use postcard::ser_flavors::{Flavor, Slice};

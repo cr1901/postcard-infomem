@@ -17,7 +17,7 @@ cfg_if! {
             io::stdout()
         }
 
-        pub fn mk_reader(infomem: Slice) -> impl ReadSingle + IntoIterator<Item = u8> + Clone {
+        pub fn mk_reader(infomem: Slice) -> impl ReadSingle + IntoIterator<Item = u8> + Clone + '_ {
             infomem
         }
     }

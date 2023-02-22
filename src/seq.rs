@@ -21,6 +21,8 @@ impl<'de> ReadSingle for &'de [u8] {
     }
 }
 
+impl<T> sealed::Sealed for T where T: ReadSingle {}
+
 pub struct Seq<R, S> {
     src: R,
     buf: S,

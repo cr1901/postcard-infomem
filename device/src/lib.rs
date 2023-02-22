@@ -9,6 +9,7 @@ use core::slice::from_raw_parts;
 use core::{ops, slice};
 
 use postcard_infomem::{ReadSingle, ReadSingleError};
+use serde::Deserialize;
 
 #[macro_export]
 /** Create a `static` variable to hold a serialized [`InfoMem`](../postcard_infomem/struct.InfoMem.html) structure.
@@ -151,7 +152,7 @@ impl Ptr {
 }
 
 #[cfg(not(target_arch = "avr"))]
-impl From<Ptr> for Slice {
+impl<'a> From<Ptr> for Slice<'a> {
     fn from(value: Ptr) -> Self {
         // SAFETY: You have already opted into `unsafe` to create
         // a `Ptr`, and are upholding `Ptr`s invariants before
@@ -172,21 +173,21 @@ to access `INFOMEM`.
 In particular, [`Slice`] and adapters that consume [`Range`] will
 create iterators over `u8`, while `&'static [u8]` creates an iterator
 over `&u8`. */
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Deserialize)]
 #[cfg(not(target_arch = "avr"))]
-pub struct Slice(&'static [u8]);
+pub struct Slice<'a>(&'a [u8]);
 
 #[cfg(not(target_arch = "avr"))]
-impl From<Slice> for &'static [u8] {
-    fn from(value: Slice) -> Self {
+impl<'a> From<Slice<'a>> for &'a [u8] {
+    fn from(value: Slice<'a>) -> Self {
         value.0
     }
 }
 
 #[cfg(not(target_arch = "avr"))]
-impl IntoIterator for Slice {
+impl<'a> IntoIterator for Slice<'a> {
     type Item = u8;
-    type IntoIter = Copied<slice::Iter<'static, u8>>;
+    type IntoIter = Copied<slice::Iter<'a, u8>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter().copied()
@@ -194,7 +195,7 @@ impl IntoIterator for Slice {
 }
 
 #[cfg(not(target_arch = "avr"))]
-impl ReadSingle for Slice {
+impl<'a> ReadSingle for Slice<'a> {
     fn read_single(&mut self) -> Result<u8, ReadSingleError> {
         self.0.read_single()
     }
@@ -236,7 +237,7 @@ impl Range {
         write!(w, "{:X}", data).unwrap();
     }
     ``` */
-    pub fn read_single<F>(self, f: F) -> RangeReadSingle<F> where F: FnMut(usize) -> Result<u8, ReadSingleError> {
+    pub fn read_single<F>(self, f: F) -> impl ReadSingle + Iterator<Item = u8> + Clone where F: FnMut(usize) -> Result<u8, ReadSingleError> + Clone {
         RangeReadSingle {
             range: self,
             f
@@ -294,14 +295,15 @@ impl<F> Iterator for RangeReadSingle<F> where F: FnMut(usize) -> Result<u8, Read
 #[cfg(test)]
 mod tests {
     use super::*;
-    use postcard_infomem::{InfoMem, to_stdvec_magic};
+    use postcard::{to_allocvec, from_bytes};
+    use postcard_infomem::{InfoMem, to_allocvec_magic, from_seq_magic};
 
     extern crate std;
     use std::vec::Vec;
 
     #[test]
     fn test_range_read_single_slice_equiv() {
-        let im_ser = to_stdvec_magic(&InfoMem::<&[u8]>::default()).unwrap().leak();
+        let im_ser = to_allocvec_magic(&InfoMem::<&[u8]>::default()).unwrap().leak();
 
         // Safety- We just created the vec and leaked it to make it 'static!
         let slice: Slice = unsafe { Ptr::new(im_ser.as_ptr(), im_ser.len()) }.into();
@@ -315,5 +317,24 @@ mod tests {
         }).collect::<Vec<u8>>();
 
         assert_eq!(collected_slice, collected_range);
+    }
+
+    #[test]
+    fn test_deser_user_payload_deferred() {
+        let mut im = InfoMem::<&[u8]>::default();
+        let user_payload = &(b"test data" as &[u8], 42);
+
+        let user_tuple_ser = to_allocvec(&user_payload).unwrap().leak();
+        im.user = Some(user_tuple_ser);
+        let im_ser = to_allocvec_magic(&im).unwrap().leak();
+
+        // Safety- We just created the vec and leaked it to make it 'static!
+        let slice: Slice = unsafe { Ptr::new(im_ser.as_ptr(), im_ser.len()) }.into();
+
+        let mut buf = [0; 16];
+        let im_ser_payload = from_seq_magic::<_, _, Slice>(slice, &mut buf).unwrap();
+
+        assert_eq!(im_ser_payload.user.unwrap().0, user_tuple_ser);
+        assert_eq!(user_payload, &from_bytes::<(&[u8], i32)>(im_ser_payload.user.unwrap().0).unwrap());
     }
 }

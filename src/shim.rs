@@ -10,6 +10,11 @@ use std::error::Error as StdError;
 use semver;
 use serde::{Deserialize, Serialize};
 
+#[cfg(all(not(feature = "std"), feature = "alloc"))]
+extern crate alloc;
+#[cfg(all(not(feature = "std"), feature = "alloc"))]
+use alloc::string::ToString;
+
 #[cfg(feature = "std")]
 use rustc_version;
 
