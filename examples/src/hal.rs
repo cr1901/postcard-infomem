@@ -49,8 +49,8 @@ cfg_if! {
             Serial::new()
         }
 
-        pub fn mk_reader(infomem: Range) -> impl ReadSingle + IntoIterator<Item = u8> + Clone {
-            infomem.read_single(|addr| {
+        pub fn mk_reader(infomem: Range) -> impl SequentialRead + IntoIterator<Item = u8> + Clone {
+            infomem.sequential_read(|addr| {
                 while EECR::is_set(EECR::EEPE) {}
                 EEAR::write(addr as u16);
                 EECR::set(EECR::EERE);

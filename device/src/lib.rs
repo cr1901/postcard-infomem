@@ -8,7 +8,7 @@ use core::iter::Copied;
 use core::slice::from_raw_parts;
 use core::{ops, slice};
 
-use postcard_infomem::{ReadSingle, ReadSingleError};
+use postcard_infomem::{SequentialRead, SequentialReadError};
 use serde::Deserialize;
 
 #[macro_export]
@@ -195,9 +195,9 @@ impl<'a> IntoIterator for Slice<'a> {
 }
 
 #[cfg(not(target_arch = "avr"))]
-impl<'a> ReadSingle for Slice<'a> {
-    fn read_single(&mut self) -> Result<u8, ReadSingleError> {
-        self.0.read_single()
+impl<'a> SequentialRead for Slice<'a> {
+    fn sequential_read(&mut self) -> Result<u8, SequentialReadError> {
+        self.0.sequential_read()
     }
 }
 
@@ -208,13 +208,13 @@ on Harvard architectures, one can iterate over the range of addresses used
 for the `INFOMEM` `struct` instead. The addresses are represented as [`usize`]s.
 
 This type is intended to be used as part of an [`Iterator`] adapter, to access
-the `INFOMEM` in a platform-specific manner. See [`read_single`]. */
+the `INFOMEM` in a platform-specific manner. See [`sequential_read`]. */
 #[derive(Clone)]
 pub struct Range(ops::Range<usize>);
 
 impl Range {
     /** Create an adapter from [`Range`] to `INFOMEM` `u8` that implements
-    [`ReadSingle`] and [`Iterator`].
+    [`SequentialRead`] and [`Iterator`].
     
     [`Range`] by itself returns [`usize`]s that represent addresses. The user
     takes addresses supplied by [`Range`] to access `INFOMEM` in a platform
@@ -222,7 +222,7 @@ impl Range {
     contents of `INFOMEM` as [`UpperHex`] are equivalent:
 
     ```ignore
-    for data in infomem::get::<Range>().read_single(|addr| {
+    for data in infomem::get::<Range>().sequential_read(|addr| {
         // SAFTEY: we have to opt into unsafety to create a Range,
         // a range provided by include_postcard_infomem macro will be
         // safe to dereference over all `usize`s passed to this closure.
@@ -237,8 +237,8 @@ impl Range {
         write!(w, "{:X}", data).unwrap();
     }
     ``` */
-    pub fn read_single<F>(self, f: F) -> impl ReadSingle + Iterator<Item = u8> + Clone where F: FnMut(usize) -> Result<u8, ReadSingleError> + Clone {
-        RangeReadSingle {
+    pub fn sequential_read<F>(self, f: F) -> impl SequentialRead + Iterator<Item = u8> + Clone where F: FnMut(usize) -> Result<u8, SequentialReadError> + Clone {
+        RangeSequentialRead {
             range: self,
             f
         }
@@ -266,24 +266,24 @@ impl Iterator for Range {
 the data address space.
 
 This `struct` is a convenience to avoid the need to create unique types
-for each platform that implement the [`ReadSingle`] trait. It also implements
+for each platform that implement the [`SequentialRead`] trait. It also implements
 [`Iterator`] for parity with [`Slice`]; errors are mapped to [`None`] when
 used as an iterator.
 */
 #[derive(Clone)]
-pub struct RangeReadSingle<F> {
+pub struct RangeSequentialRead<F> {
     range: Range,
     f: F
 }
 
-impl<F> ReadSingle for RangeReadSingle<F> where F: FnMut(usize) -> Result<u8, ReadSingleError> {
-    fn read_single(&mut self) -> Result<u8, ReadSingleError> {
-        let addr = self.range.next().ok_or(ReadSingleError)?;
+impl<F> SequentialRead for RangeSequentialRead<F> where F: FnMut(usize) -> Result<u8, SequentialReadError> {
+    fn sequential_read(&mut self) -> Result<u8, SequentialReadError> {
+        let addr = self.range.next().ok_or(SequentialReadError)?;
         (self.f)(addr)
     }
 }
 
-impl<F> Iterator for RangeReadSingle<F> where F: FnMut(usize) -> Result<u8, ReadSingleError> {
+impl<F> Iterator for RangeSequentialRead<F> where F: FnMut(usize) -> Result<u8, SequentialReadError> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -302,7 +302,7 @@ mod tests {
     use std::vec::Vec;
 
     #[test]
-    fn test_range_read_single_slice_equiv() {
+    fn test_range_sequential_read_slice_equiv() {
         let im_ser = to_allocvec_magic(&InfoMem::<&[u8]>::default()).unwrap().leak();
 
         // Safety- We just created the vec and leaked it to make it 'static!
@@ -312,7 +312,7 @@ mod tests {
         let collected_slice = slice.into_iter().collect::<Vec<u8>>();
 
         // Safety: We have full control over this allocation and know its good.
-        let collected_range: Vec<u8> = range.read_single(|addr| {
+        let collected_range: Vec<u8> = range.sequential_read(|addr| {
             Ok(unsafe { *(addr as *const u8) })
         }).collect::<Vec<u8>>();
 
@@ -334,7 +334,7 @@ mod tests {
         let mut buf = [0; 16];
         let im_ser_payload = from_seq_magic::<_, _, Slice>(slice, &mut buf).unwrap();
 
-        assert_eq!(im_ser_payload.user.unwrap().0, user_tuple_ser);
+        assert_eq!(<&[u8]>::from(im_ser_payload.user.unwrap()), user_tuple_ser);
         assert_eq!(user_payload, &from_bytes::<(&[u8], i32)>(im_ser_payload.user.unwrap().0).unwrap());
     }
 }

@@ -5,7 +5,7 @@ pub use cfg_if::cfg_if;
 pub use core::fmt;
 pub use core::ops;
 
-pub use postcard_infomem::{ReadSingle, ReadSingleError};
+pub use postcard_infomem::{SequentialRead, SequentialReadError};
 pub use postcard_infomem_device::*;
 
 /// Imports dependent on No OS (`target_os=none` or `unknown`) vs OS.

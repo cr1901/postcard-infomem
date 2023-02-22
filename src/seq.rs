@@ -6,22 +6,22 @@ use postcard::de_flavors::Flavor;
 use postcard::{Deserializer, Error, Result};
 
 #[derive(Debug, Clone, Copy)]
-pub struct ReadSingleError;
+pub struct SequentialReadError;
 
-pub trait ReadSingle {
-    fn read_single(&mut self) -> CoreResult<u8, ReadSingleError>;
+pub trait SequentialRead {
+    fn sequential_read(&mut self) -> CoreResult<u8, SequentialReadError>;
 }
 
-impl<'de> ReadSingle for &'de [u8] {
-    fn read_single(&mut self) -> CoreResult<u8, ReadSingleError> {
-        let byte = *self.get(0).ok_or(ReadSingleError)?;
+impl<'de> SequentialRead for &'de [u8] {
+    fn sequential_read(&mut self) -> CoreResult<u8, SequentialReadError> {
+        let byte = *self.get(0).ok_or(SequentialReadError)?;
         *self = &self[1..];
 
         Ok(byte)
     }
 }
 
-impl<T> sealed::Sealed for T where T: ReadSingle {}
+impl<T> sealed::Sealed for T where T: SequentialRead {}
 
 pub struct Seq<R, S> {
     src: R,
@@ -36,14 +36,14 @@ impl<R, S> Seq<R, S> {
 
 impl<'buf, R> Flavor<'buf> for Seq<R, &'buf mut [u8]>
 where
-    R: ReadSingle + 'buf,
+    R: SequentialRead + 'buf,
 {
     type Remainder = &'buf [u8];
     type Source = &'buf [u8];
 
     fn pop(&mut self) -> postcard::Result<u8> {
         self.src
-            .read_single()
+            .sequential_read()
             .map_err(|_| Error::DeserializeUnexpectedEnd)
     }
 
@@ -80,7 +80,7 @@ pub fn from_seq_magic<'buf, R, S, T>(src: R, buf: S) -> Result<InfoMem<'buf, T>>
 where
     Seq<R, S>: Flavor<'buf>,
     T: sealed::Sealed + Deserialize<'buf>,
-    R: ReadSingle + 'buf,
+    R: SequentialRead + 'buf,
 {
     let seq = Seq::new(src, buf);
     let magic = de::Magic::try_new(seq)?;
@@ -92,7 +92,7 @@ pub fn from_seq<'buf, R, S, T>(src: R, buf: S) -> Result<InfoMem<'buf, T>>
 where
     Seq<R, S>: Flavor<'buf>,
     T: sealed::Sealed + Deserialize<'buf>,
-    R: ReadSingle + 'buf,
+    R: SequentialRead + 'buf,
 {
     let seq = Seq::new(src, buf);
     let mut de_seq = Deserializer::from_flavor(seq);
@@ -128,4 +128,5 @@ mod tests {
 
         assert_eq!(err, Error::DeserializeUnexpectedEnd);
     }
+
 }

@@ -25,7 +25,7 @@ mod magic;
 pub use magic::*;
 
 mod seq;
-pub use seq::{from_seq, from_seq_magic, ReadSingle, ReadSingleError};
+pub use seq::{from_seq, from_seq_magic, SequentialRead, SequentialReadError};
 
 mod shim;
 pub use shim::*;
