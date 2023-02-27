@@ -9,6 +9,35 @@ use crate::prelude::{*, hal::*, osal::*};
 use super::osal::OurCoreWrite;
 
 cfg_if! {
+    if #[cfg(target_arch = "avr")] {
+        pub fn mk_iterator<R>(r: R) -> impl Iterator<Item = u8>
+        where R: IntoIterator<Item = u8>
+        {
+            r.into_iter()
+        }
+
+        pub fn deserialize_infomem<'buf, R, S>(r: R, buf: S) -> postcard::Result<InfoMem<'buf>> 
+        where Seq<R, S>: Flavor<'buf>,
+        R: SequentialRead
+        {
+            from_seq_magic(r, buf)
+        }
+    } else {
+        pub fn mk_iterator<R>(r: R) -> impl Iterator<Item = u8>
+        where R: IntoIterator<Item = &'static u8>
+        {
+            r.into_iter().copied()
+        }
+
+        pub fn deserialize_infomem<'a, R>(r: R, _buf: &mut [u8]) -> postcard::Result<InfoMem<'a>>
+        where R: Into<&'static [u8]>
+        {
+            from_bytes_magic(r.into())
+        }
+    }
+}
+
+cfg_if! {
     if #[cfg(feature = "ruduino")] {
         pub struct Serial(());
 
@@ -49,7 +78,7 @@ cfg_if! {
             Serial::new()
         }
 
-        pub fn mk_reader(infomem: Range) -> impl SequentialRead + IntoIterator<Item = u8> + Clone {
+        pub fn mk_reader(infomem: InfoMemPtr) -> impl IntoIterator<Item = u8> + Clone + SequentialRead {
             infomem.sequential_read(|addr| {
                 while EECR::is_set(EECR::EEPE) {}
                 EEAR::write(addr as u16);

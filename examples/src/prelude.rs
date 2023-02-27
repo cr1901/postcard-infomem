@@ -5,7 +5,10 @@ pub use cfg_if::cfg_if;
 pub use core::fmt;
 pub use core::ops;
 
-pub use postcard_infomem::{SequentialRead, SequentialReadError};
+#[allow(unused_imports)]
+pub use postcard::de_flavors::Flavor;
+#[allow(unused_imports)]
+pub use postcard_infomem::{de::Seq, InfoMem, from_seq_magic, from_bytes_magic, SequentialRead, SequentialReadError};
 pub use postcard_infomem_device::*;
 
 /// Imports dependent on No OS (`target_os=none` or `unknown`) vs OS.

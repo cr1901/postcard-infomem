@@ -17,8 +17,8 @@ cfg_if! {
             io::stdout()
         }
 
-        pub fn mk_reader(infomem: Slice) -> impl SequentialRead + IntoIterator<Item = u8> + Clone + '_ {
-            infomem
+        pub fn mk_reader(infomem: InfoMemPtr) -> impl IntoIterator<Item = &'static u8> + Clone + Into<&'static [u8]> {
+            <&'static [u8]>::from(infomem)
         }
     }
 }

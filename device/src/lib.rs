@@ -4,12 +4,11 @@ preclude using the crate for hosted applications).
 */
 #![no_std]
 
-use core::iter::Copied;
+#[allow(unused_imports)]
 use core::slice::from_raw_parts;
-use core::{ops, slice};
+use core::ops;
 
 use postcard_infomem::{SequentialRead, SequentialReadError};
-use serde::Deserialize;
 
 #[macro_export]
 /** Create a `static` variable to hold a serialized [`InfoMem`](../postcard_infomem/struct.InfoMem.html) structure.
@@ -114,12 +113,10 @@ macro_rules! include_postcard_infomem {
             `static`. On all targets, [`From<Ptr>`] is defined for [`Range<usize>`], \
             which can iterate over `usize`s representing each address used by \
             the `INFOMEM` `struct`."]
-            pub fn get<T>() -> T
-            where
-                T: From<$crate::Ptr>,
+            pub fn get() -> $crate::InfoMemPtr 
             {
-                // SAFETY: `Ptr` is derived from a static array with known length.
-                unsafe { $crate::Ptr::new(INFOMEM.as_ptr(), INFOMEM.len()).into() }
+                // SAFETY: `InfoMemPtr` is derived from a static array with known length.
+                unsafe { $crate::InfoMemPtr::new(INFOMEM.as_ptr() as usize, INFOMEM.as_ptr() as usize + INFOMEM.len()) }
             }
         }
     };
@@ -131,99 +128,47 @@ The [`Ptr`] `struct` is a wrapper over a pointer that can be used as
 a portable type to access the `INFOMEM` `static` on targets with one or
 multiple address spaces.
 
-It is meant to be immediately converted to another, more ergonomic type for
-your environment. */
-pub struct Ptr(*const u8, usize);
+In most scenarios, `InfoMemPtr` can be immediately converted to a &`static [u8]
+containing the `INFOMEM` contents. However, other scenarios exist where this is
+not possible, such as Information Memory being stored in a separate address
+space or a serial (e.g. I2C) EEPROM. In those cases, the [`sequential_read`]
+function can be used. */
+pub struct InfoMemPtr(ops::Range<usize>);
 
-impl Ptr {
-    /** Create a [`Ptr`] to an `INFOMEM` `static`.
+impl InfoMemPtr {
+    /** Create an abstract pointer to an `INFOMEM` `static`.
 
     ## Safety
 
     Due to publicly-available [`From`] impls, the pointer needs to
     point to a valid memory block that's _not_ currently mutably borrowed.
-    Otherwise, Undefined Behavior may occur when [`Ptr`] is converted.
+    Additionally, `start` must be less than `end`.
+    Otherwise, Undefined Behavior may occur when [`InfoMemPtr`] is converted.
 
-    [`include_postcard_infomem`] takes care of safely creating a [`Ptr`] for you.
+    [`include_postcard_infomem`] takes care of safely creating an [`InfoMemPtr`] for you.
     */
-    pub unsafe fn new(ptr: *const u8, len: usize) -> Self {
-        Ptr(ptr, len)
+    pub unsafe fn new(start: usize, end: usize) -> Self {
+        Self(ops::Range { start, end })
     }
-}
 
-#[cfg(not(target_arch = "avr"))]
-impl<'a> From<Ptr> for Slice<'a> {
-    fn from(value: Ptr) -> Self {
-        // SAFETY: You have already opted into `unsafe` to create
-        // a `Ptr`, and are upholding `Ptr`s invariants before
-        // doing the conversion.
-        Self(unsafe { from_raw_parts(value.0, value.1) })
-    }
-}
+    /** Create an adapter from an [`InfoMemPtr`] to access sequentially access
+    an `INFOMEM` not in the current address space. Return type implements
+    [`SequentialRead`], [`Iterator`], and [`Clone`].
 
-/** Newtype over a `'static` reference to `INFOMEM`.
-
-[`Slice`] is returned by `infomem::get` on most architectures, where
-the `INFOMEM` static can be accessed safely. A newtype is used
-instead of returning the `&'static [u8]` directly so that conditionally
-compiled code operating on [`Slice`] can have the same structure
-regardless of whether the architecture uses [`Slice`] or [`Range`]
-to access `INFOMEM`.
-
-In particular, [`Slice`] and adapters that consume [`Range`] will
-create iterators over `u8`, while `&'static [u8]` creates an iterator
-over `&u8`. */
-#[derive(Clone, Copy, Deserialize)]
-#[cfg(not(target_arch = "avr"))]
-pub struct Slice<'a>(&'a [u8]);
-
-#[cfg(not(target_arch = "avr"))]
-impl<'a> From<Slice<'a>> for &'a [u8] {
-    fn from(value: Slice<'a>) -> Self {
-        value.0
-    }
-}
-
-#[cfg(not(target_arch = "avr"))]
-impl<'a> IntoIterator for Slice<'a> {
-    type Item = u8;
-    type IntoIter = Copied<slice::Iter<'a, u8>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter().copied()
-    }
-}
-
-#[cfg(not(target_arch = "avr"))]
-impl<'a> SequentialRead for Slice<'a> {
-    fn sequential_read(&mut self) -> Result<u8, SequentialReadError> {
-        self.0.sequential_read()
-    }
-}
-
-/** Newtype over a `Range` of `INFOMEM` addresses.
-
-When a reference to an `INFOMEM` `struct` cannot be safely returned, such as
-on Harvard architectures, one can iterate over the range of addresses used
-for the `INFOMEM` `struct` instead. The addresses are represented as [`usize`]s.
-
-This type is intended to be used as part of an [`Iterator`] adapter, to access
-the `INFOMEM` in a platform-specific manner. See [`sequential_read`]. */
-#[derive(Clone)]
-pub struct Range(ops::Range<usize>);
-
-impl Range {
-    /** Create an adapter from [`Range`] to `INFOMEM` `u8` that implements
-    [`SequentialRead`] and [`Iterator`].
+    This function is a convenience to avoid the need to create unique types
+    for each platform that implement the [`SequentialRead`] trait. The return
+    type also implements [`Iterator`] for parity with `&[u8]`; errors are
+    mapped to [`None`] when used as an iterator.
     
-    [`Range`] by itself returns [`usize`]s that represent addresses. The user
-    takes addresses supplied by [`Range`] to access `INFOMEM` in a platform
-    specific manner. For instance, the following two loops which print the
-    contents of `INFOMEM` as [`UpperHex`] are equivalent:
+    [`InfoMemPtr`] by itself contains [`usize`]s that represent generic addresses.
+    The user creates a closure that takes addresses supplied by [`InfoMemPtr`]
+    to access `INFOMEM` in a platform specific manner. For instance, the
+    following two loops which print the contents of `INFOMEM` as [`UpperHex`]
+    are equivalent:
 
     ```ignore
-    for data in infomem::get::<Range>().sequential_read(|addr| {
-        // SAFTEY: we have to opt into unsafety to create a Range,
+    for data in infomem::get().sequential_read(|addr| {
+        // SAFTEY: we have to opt into unsafety to create an `InfoMemPtr`,
         // a range provided by include_postcard_infomem macro will be
         // safe to dereference over all `usize`s passed to this closure.
         Ok(unsafe { *(addr as *const u8) })
@@ -233,62 +178,54 @@ impl Range {
     ```
 
     ```ignore
-    for data in infomem::get::<Slice>() {
+    for data in <&'static [u8]>::from(infomem::get()) {
         write!(w, "{:X}", data).unwrap();
     }
-    ``` */
+    ``` 
+    
+    In practice, a closure passed to `sequential_read` will access I/O to
+    stream information memory from a separate address space or off-chip
+    peripheral.
+    */
     pub fn sequential_read<F>(self, f: F) -> impl SequentialRead + Iterator<Item = u8> + Clone where F: FnMut(usize) -> Result<u8, SequentialReadError> + Clone {
-        RangeSequentialRead {
-            range: self,
-            f
-        }
+        InfoMemSequentialRead(self.0, f)
     }
 }
 
-impl From<Ptr> for Range {
-    fn from(value: Ptr) -> Self {
-        Self(ops::Range {
-            start: value.0 as usize,
-            end: value.0 as usize + value.1,
-        })
-    }
-}
-
-impl Iterator for Range {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
+#[cfg(not(target_arch = "avr"))]
+impl<'a> From<InfoMemPtr> for &'a [u8] {
+    fn from(value: InfoMemPtr) -> Self {
+        // SAFETY: You have already opted into `unsafe` to create
+        // an [`InfoMemPtr`], and are upholding `InfoMemPtr`s invariants before
+        // doing the conversion.
+        unsafe { from_raw_parts(value.0.start as *const u8, value.0.end - value.0.start) }
     }
 }
 
 /* `struct` which maps [`usize`] addresses to `INFOMEM` contents outside of
-the data address space.
+the current data address space.
 
 This `struct` is a convenience to avoid the need to create unique types
 for each platform that implement the [`SequentialRead`] trait. It also implements
-[`Iterator`] for parity with [`Slice`]; errors are mapped to [`None`] when
+[`Iterator`] for parity with `&[u8]`; errors are mapped to [`None`] when
 used as an iterator.
 */
 #[derive(Clone)]
-pub struct RangeSequentialRead<F> {
-    range: Range,
-    f: F
-}
+struct InfoMemSequentialRead<F>(ops::Range<usize>, F);
 
-impl<F> SequentialRead for RangeSequentialRead<F> where F: FnMut(usize) -> Result<u8, SequentialReadError> {
+impl<F> SequentialRead for InfoMemSequentialRead<F> where F: FnMut(usize) -> Result<u8, SequentialReadError> {
     fn sequential_read(&mut self) -> Result<u8, SequentialReadError> {
-        let addr = self.range.next().ok_or(SequentialReadError)?;
-        (self.f)(addr)
+        let addr = self.0.next().ok_or(SequentialReadError)?;
+        (self.1)(addr)
     }
 }
 
-impl<F> Iterator for RangeSequentialRead<F> where F: FnMut(usize) -> Result<u8, SequentialReadError> {
+impl<F> Iterator for InfoMemSequentialRead<F> where F: FnMut(usize) -> Result<u8, SequentialReadError> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let addr = self.range.next()?;
-        (self.f)(addr).ok()
+        let addr = self.0.next()?;
+        (self.1)(addr).ok()
     }
 }
 
@@ -304,37 +241,23 @@ mod tests {
     #[test]
     fn test_range_sequential_read_slice_equiv() {
         let im_ser = to_allocvec_magic(&InfoMem::<&[u8]>::default()).unwrap().leak();
+        let (start, end) = (im_ser.as_ptr() as usize, im_ser.as_ptr() as usize + im_ser.len());
 
         // Safety- We just created the vec and leaked it to make it 'static!
-        let slice: Slice = unsafe { Ptr::new(im_ser.as_ptr(), im_ser.len()) }.into();
-        let range: Range = unsafe { Ptr::new(im_ser.as_ptr(), im_ser.len()) }.into();
-
-        let collected_slice = slice.into_iter().collect::<Vec<u8>>();
-
-        // Safety: We have full control over this allocation and know its good.
-        let collected_range: Vec<u8> = range.sequential_read(|addr| {
+        let slice: &[u8] = unsafe { InfoMemPtr::new(start, end) }.into();
+        let range = unsafe { InfoMemPtr::new(start, end) }.sequential_read(|addr| {
             Ok(unsafe { *(addr as *const u8) })
-        }).collect::<Vec<u8>>();
+        });
+
+        let collected_slice = slice.into_iter().copied().collect::<Vec<u8>>();
+        // Safety: We have full control over this allocation and know its good.
+        let collected_range: Vec<u8> = range.collect::<Vec<u8>>();
 
         assert_eq!(collected_slice, collected_range);
     }
 
     #[test]
     fn test_deser_user_payload_deferred() {
-        let mut im = InfoMem::<&[u8]>::default();
-        let user_payload = &(b"test data" as &[u8], 42);
-
-        let user_tuple_ser = to_allocvec(&user_payload).unwrap().leak();
-        im.user = Some(user_tuple_ser);
-        let im_ser = to_allocvec_magic(&im).unwrap().leak();
-
-        // Safety- We just created the vec and leaked it to make it 'static!
-        let slice: Slice = unsafe { Ptr::new(im_ser.as_ptr(), im_ser.len()) }.into();
-
-        let mut buf = [0; 16];
-        let im_ser_payload = from_seq_magic::<_, _, Slice>(slice, &mut buf).unwrap();
-
-        assert_eq!(<&[u8]>::from(im_ser_payload.user.unwrap()), user_tuple_ser);
-        assert_eq!(user_payload, &from_bytes::<(&[u8], i32)>(im_ser_payload.user.unwrap().0).unwrap());
+        todo!()
     }
 }

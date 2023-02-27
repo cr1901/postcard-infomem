@@ -93,6 +93,7 @@ pub(crate) mod sealed {
     /// Trait to constrain the types of user-data that can be appended to an [`InfoMem`].
     pub trait Sealed {}
 
+    impl Sealed for &[u8] {}
     impl Sealed for &mut [u8] {}
     #[cfg(feature = "alloc")]
     impl Sealed for Vec<u8> {}

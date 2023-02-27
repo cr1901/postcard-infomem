@@ -10,8 +10,10 @@ doc = false
 
 [dependencies]
 cfg-if = "1.0.0"
+postcard = { version = "1.0.4", default-features = false }
 postcard-infomem-device = { path = "../device" }
 postcard-infomem = { path = ".." }
+serde = { version = "1.0.152", default-features = false }
 
 [target.'cfg(any(target_os = "none", target_os = "unknown"))'.dependencies]
 embedded-hal = "=1.0.0-alpha.9"
