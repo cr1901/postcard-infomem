@@ -108,23 +108,20 @@ macro_rules! include_postcard_infomem {
             which can iterate over `usize`s representing each address used by \
             the `INFOMEM` `struct`."]
             #[cfg(not(target_arch = "avr"))]
-            pub fn get() -> &'static [u8]
-            {
+            pub fn get() -> &'static [u8] {
                 &INFOMEM[..]
             }
 
             #[cfg(target_arch = "avr")]
-            pub fn get() -> core::ops::Range<usize>
-            {
+            pub fn get() -> core::ops::Range<usize> {
                 core::ops::Range {
                     start: INFOMEM.as_ptr() as usize,
-                    end: INFOMEM.as_ptr() as usize + INFOMEM.len()
+                    end: INFOMEM.as_ptr() as usize + INFOMEM.len(),
                 }
             }
         }
-    }
+    };
 }
 
 #[cfg(test)]
-mod tests {
-}
+mod tests {}

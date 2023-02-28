@@ -3,7 +3,7 @@ and reading from Information Memory.
 */
 
 #[allow(unused_imports)]
-use crate::prelude::{*, hal::*, osal::*};
+use crate::prelude::{hal::*, osal::*, *};
 
 #[cfg(any(target_os = "none", target_os = "unknown"))]
 use super::osal::OurCoreWrite;
@@ -22,7 +22,7 @@ cfg_if! {
             })
         }
 
-        pub fn deserialize_infomem<'buf>(r: Range<usize>, buf: &'buf mut [u8]) -> postcard::Result<InfoMem<'buf>> 
+        pub fn deserialize_infomem<'buf>(r: Range<usize>, buf: &'buf mut [u8]) -> postcard::Result<InfoMem<'buf>>
         {
             from_seq_magic(r.into_iter().map(|addr| {
                 while EECR::is_set(EECR::EEPE) {}

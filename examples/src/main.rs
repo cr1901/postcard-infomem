@@ -2,9 +2,9 @@
 #![cfg_attr(any(target_os = "none", target_os = "unknown"), no_main)]
 
 mod prelude;
-use prelude::*;
 #[allow(unused_imports)]
 use prelude::osal::*;
+use prelude::*;
 
 mod hal;
 #[allow(unused_imports)]

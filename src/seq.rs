@@ -14,7 +14,10 @@ pub trait SequentialRead {
     fn sequential_read(&mut self) -> CoreResult<u8, SequentialReadError>;
 }
 
-impl<F> SequentialRead for iter::Map<Range<usize>, F> where F: FnMut(usize) -> CoreResult<u8, SequentialReadError> {
+impl<F> SequentialRead for iter::Map<Range<usize>, F>
+where
+    F: FnMut(usize) -> CoreResult<u8, SequentialReadError>,
+{
     fn sequential_read(&mut self) -> CoreResult<u8, SequentialReadError> {
         self.next().ok_or(SequentialReadError)?
     }
@@ -103,13 +106,17 @@ mod tests {
     use super::*;
     use crate::{to_stdvec_magic, InfoMem};
 
-    fn seq_vec(im_vec: Vec<u8>) -> impl SequentialRead + Iterator<Item = CoreResult<u8, SequentialReadError>> {
+    fn seq_vec(
+        im_vec: Vec<u8>,
+    ) -> impl SequentialRead + Iterator<Item = CoreResult<u8, SequentialReadError>> {
         let im_slice = im_vec.leak();
 
-        (im_slice.as_ptr() as usize..im_slice.as_ptr() as usize + im_slice.len()).into_iter().map(|addr| {
-            // Safety- 'static.
-            Ok(unsafe { *(addr as *const u8) })
-        })
+        (im_slice.as_ptr() as usize..im_slice.as_ptr() as usize + im_slice.len())
+            .into_iter()
+            .map(|addr| {
+                // Safety- 'static.
+                Ok(unsafe { *(addr as *const u8) })
+            })
     }
 
     #[test]

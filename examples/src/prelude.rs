@@ -8,7 +8,9 @@ pub use core::ops;
 #[allow(unused_imports)]
 pub use postcard::de_flavors::Flavor;
 #[allow(unused_imports)]
-pub use postcard_infomem::{de::Seq, InfoMem, from_seq_magic, from_bytes_magic, SequentialRead, SequentialReadError};
+pub use postcard_infomem::{
+    de::Seq, from_bytes_magic, from_seq_magic, InfoMem, SequentialRead, SequentialReadError,
+};
 pub use postcard_infomem_device::*;
 
 /// Imports dependent on No OS (`target_os=none` or `unknown`) vs OS.
