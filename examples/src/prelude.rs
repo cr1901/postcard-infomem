@@ -51,6 +51,8 @@ pub mod hal {
             #[used]
             pub static BOOT2_FIRMWARE: [u8; 256] = rp2040_boot2::BOOT_LOADER_GD25Q64CS;
         } else if #[cfg(feature = "ruduino")] {
+            pub use core::ops::Range;
+
             pub use ruduino;
             pub use ruduino::cores::current::{port, EEAR, EECR, EEDR};
             pub use ruduino::legacy::serial;

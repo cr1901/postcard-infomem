@@ -4,12 +4,6 @@ preclude using the crate for hosted applications).
 */
 #![no_std]
 
-#[allow(unused_imports)]
-use core::slice::from_raw_parts;
-use core::ops;
-
-use postcard_infomem::{SequentialRead, SequentialReadError};
-
 #[macro_export]
 /** Create a `static` variable to hold a serialized [`InfoMem`](../postcard_infomem/struct.InfoMem.html) structure.
 
@@ -113,119 +107,21 @@ macro_rules! include_postcard_infomem {
             `static`. On all targets, [`From<Ptr>`] is defined for [`Range<usize>`], \
             which can iterate over `usize`s representing each address used by \
             the `INFOMEM` `struct`."]
-            pub fn get() -> $crate::InfoMemPtr 
+            #[cfg(not(target_arch = "avr"))]
+            pub fn get() -> &'static [u8]
             {
-                // SAFETY: `InfoMemPtr` is derived from a static array with known length.
-                unsafe { $crate::InfoMemPtr::new(INFOMEM.as_ptr() as usize, INFOMEM.as_ptr() as usize + INFOMEM.len()) }
+                &INFOMEM[..]
+            }
+
+            #[cfg(target_arch = "avr")]
+            pub fn get() -> core::ops::Range<usize>
+            {
+                core::ops::Range {
+                    start: INFOMEM.as_ptr() as usize,
+                    end: INFOMEM.as_ptr() as usize + INFOMEM.len()
+                }
             }
         }
-    };
-}
-
-/** Pointer to an infomem struct that is address-space aware.
-
-The [`Ptr`] `struct` is a wrapper over a pointer that can be used as
-a portable type to access the `INFOMEM` `static` on targets with one or
-multiple address spaces.
-
-In most scenarios, `InfoMemPtr` can be immediately converted to a &`static [u8]
-containing the `INFOMEM` contents. However, other scenarios exist where this is
-not possible, such as Information Memory being stored in a separate address
-space or a serial (e.g. I2C) EEPROM. In those cases, the [`sequential_read`]
-function can be used. */
-pub struct InfoMemPtr(ops::Range<usize>);
-
-impl InfoMemPtr {
-    /** Create an abstract pointer to an `INFOMEM` `static`.
-
-    ## Safety
-
-    Due to publicly-available [`From`] impls, the pointer needs to
-    point to a valid memory block that's _not_ currently mutably borrowed.
-    Additionally, `start` must be less than `end`.
-    Otherwise, Undefined Behavior may occur when [`InfoMemPtr`] is converted.
-
-    [`include_postcard_infomem`] takes care of safely creating an [`InfoMemPtr`] for you.
-    */
-    pub unsafe fn new(start: usize, end: usize) -> Self {
-        Self(ops::Range { start, end })
-    }
-
-    /** Create an adapter from an [`InfoMemPtr`] to access sequentially access
-    an `INFOMEM` not in the current address space. Return type implements
-    [`SequentialRead`], [`Iterator`], and [`Clone`].
-
-    This function is a convenience to avoid the need to create unique types
-    for each platform that implement the [`SequentialRead`] trait. The return
-    type also implements [`Iterator`] for parity with `&[u8]`; errors are
-    mapped to [`None`] when used as an iterator.
-    
-    [`InfoMemPtr`] by itself contains [`usize`]s that represent generic addresses.
-    The user creates a closure that takes addresses supplied by [`InfoMemPtr`]
-    to access `INFOMEM` in a platform specific manner. For instance, the
-    following two loops which print the contents of `INFOMEM` as [`UpperHex`]
-    are equivalent:
-
-    ```ignore
-    for data in infomem::get().sequential_read(|addr| {
-        // SAFTEY: we have to opt into unsafety to create an `InfoMemPtr`,
-        // a range provided by include_postcard_infomem macro will be
-        // safe to dereference over all `usize`s passed to this closure.
-        Ok(unsafe { *(addr as *const u8) })
-    }) {
-        write!(w, "{:X}", data).unwrap();
-    }
-    ```
-
-    ```ignore
-    for data in <&'static [u8]>::from(infomem::get()) {
-        write!(w, "{:X}", data).unwrap();
-    }
-    ``` 
-    
-    In practice, a closure passed to `sequential_read` will access I/O to
-    stream information memory from a separate address space or off-chip
-    peripheral.
-    */
-    pub fn sequential_read<F>(self, f: F) -> impl SequentialRead + Iterator<Item = u8> + Clone where F: FnMut(usize) -> Result<u8, SequentialReadError> + Clone {
-        InfoMemSequentialRead(self.0, f)
-    }
-}
-
-#[cfg(not(target_arch = "avr"))]
-impl<'a> From<InfoMemPtr> for &'a [u8] {
-    fn from(value: InfoMemPtr) -> Self {
-        // SAFETY: You have already opted into `unsafe` to create
-        // an [`InfoMemPtr`], and are upholding `InfoMemPtr`s invariants before
-        // doing the conversion.
-        unsafe { from_raw_parts(value.0.start as *const u8, value.0.end - value.0.start) }
-    }
-}
-
-/* `struct` which maps [`usize`] addresses to `INFOMEM` contents outside of
-the current data address space.
-
-This `struct` is a convenience to avoid the need to create unique types
-for each platform that implement the [`SequentialRead`] trait. It also implements
-[`Iterator`] for parity with `&[u8]`; errors are mapped to [`None`] when
-used as an iterator.
-*/
-#[derive(Clone)]
-struct InfoMemSequentialRead<F>(ops::Range<usize>, F);
-
-impl<F> SequentialRead for InfoMemSequentialRead<F> where F: FnMut(usize) -> Result<u8, SequentialReadError> {
-    fn sequential_read(&mut self) -> Result<u8, SequentialReadError> {
-        let addr = self.0.next().ok_or(SequentialReadError)?;
-        (self.1)(addr)
-    }
-}
-
-impl<F> Iterator for InfoMemSequentialRead<F> where F: FnMut(usize) -> Result<u8, SequentialReadError> {
-    type Item = u8;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let addr = self.0.next()?;
-        (self.1)(addr).ok()
     }
 }
 
@@ -241,19 +137,13 @@ mod tests {
     #[test]
     fn test_range_sequential_read_slice_equiv() {
         let im_ser = to_allocvec_magic(&InfoMem::<&[u8]>::default()).unwrap().leak();
-        let (start, end) = (im_ser.as_ptr() as usize, im_ser.as_ptr() as usize + im_ser.len());
-
-        // Safety- We just created the vec and leaked it to make it 'static!
-        let slice: &[u8] = unsafe { InfoMemPtr::new(start, end) }.into();
-        let range = unsafe { InfoMemPtr::new(start, end) }.sequential_read(|addr| {
-            Ok(unsafe { *(addr as *const u8) })
+        let seq_reader = (im_ser.as_ptr() as usize..im_ser.as_ptr() as usize + im_ser.len()).into_iter().map(|addr| {
+            // Safety- We just created the vec and leaked it to make it 'static!
+            unsafe { *(addr as *const u8) }
         });
 
-        let collected_slice = slice.into_iter().copied().collect::<Vec<u8>>();
-        // Safety: We have full control over this allocation and know its good.
-        let collected_range: Vec<u8> = range.collect::<Vec<u8>>();
-
-        assert_eq!(collected_slice, collected_range);
+        let collected_range: Vec<u8> = seq_reader.collect::<Vec<u8>>();
+        assert_eq!(im_ser, collected_range);
     }
 
     #[test]

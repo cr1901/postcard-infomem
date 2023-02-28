@@ -42,20 +42,18 @@ fn main() {
     let mut w = mk_writer();
     #[cfg(any(target_os = "none", target_os = "unknown"))]
     let w: &mut dyn OurCoreWrite<Error = _> = &mut w;
-    let r = mk_reader(infomem::get());
-    let iter = mk_iterator(r.clone());
 
     let mut buf = [0u8; 128];
 
     write!(w, "\r\nDumping infomem contents...\r\n").unwrap();
 
-    for data in iter {
+    for data in mk_iterator(infomem::get()) {
         write!(w, "{}", Ascii::from(data)).unwrap();
     }
 
     write!(w, "\r\n\r\nDeserializing infomem... ").unwrap();
 
-    match deserialize_infomem(r, &mut buf) {
+    match deserialize_infomem(infomem::get(), &mut buf) {
         Ok(_im) => {
             write!(w, "Okay!\r\n").unwrap();
         }

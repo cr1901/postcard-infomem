@@ -11,16 +11,26 @@ use super::osal::OurCoreWrite;
 cfg_if! {
     if #[cfg(target_arch = "avr")] {
         pub fn mk_iterator<R>(r: R) -> impl Iterator<Item = u8>
-        where R: IntoIterator<Item = u8>
+        where R: IntoIterator<Item = usize>
         {
-            r.into_iter()
+            r.into_iter().map(|addr| {
+                while EECR::is_set(EECR::EEPE) {}
+                EEAR::write(addr as u16);
+                EECR::set(EECR::EERE);
+
+                EEDR::read()
+            })
         }
 
-        pub fn deserialize_infomem<'buf, R, S>(r: R, buf: S) -> postcard::Result<InfoMem<'buf>> 
-        where Seq<R, S>: Flavor<'buf>,
-        R: SequentialRead
+        pub fn deserialize_infomem<'buf>(r: Range<usize>, buf: &'buf mut [u8]) -> postcard::Result<InfoMem<'buf>> 
         {
-            from_seq_magic(r, buf)
+            from_seq_magic(r.into_iter().map(|addr| {
+                while EECR::is_set(EECR::EEPE) {}
+                EEAR::write(addr as u16);
+                EECR::set(EECR::EERE);
+
+                Ok(EEDR::read())
+            }), buf)
         }
     } else {
         pub fn mk_iterator<R>(r: R) -> impl Iterator<Item = u8>
@@ -76,16 +86,6 @@ cfg_if! {
 
         pub fn mk_writer() -> impl OurCoreWrite<Error = Infallible> {
             Serial::new()
-        }
-
-        pub fn mk_reader(infomem: InfoMemPtr) -> impl IntoIterator<Item = u8> + Clone + SequentialRead {
-            infomem.sequential_read(|addr| {
-                while EECR::is_set(EECR::EEPE) {}
-                EEAR::write(addr as u16);
-                EECR::set(EECR::EERE);
-
-                Ok(EEDR::read())
-            })
         }
     }
 }

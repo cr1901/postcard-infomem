@@ -16,10 +16,6 @@ cfg_if! {
         pub fn mk_writer() -> impl io::Write {
             io::stdout()
         }
-
-        pub fn mk_reader(infomem: InfoMemPtr) -> impl IntoIterator<Item = &'static u8> + Clone + Into<&'static [u8]> {
-            <&'static [u8]>::from(infomem)
-        }
     }
 }
 

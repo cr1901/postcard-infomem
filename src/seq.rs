@@ -1,3 +1,5 @@
+use core::iter;
+use core::ops::Range;
 use core::result::Result as CoreResult;
 
 use super::*;
@@ -10,6 +12,12 @@ pub struct SequentialReadError;
 
 pub trait SequentialRead {
     fn sequential_read(&mut self) -> CoreResult<u8, SequentialReadError>;
+}
+
+impl<F> SequentialRead for iter::Map<Range<usize>, F> where F: FnMut(usize) -> CoreResult<u8, SequentialReadError> {
+    fn sequential_read(&mut self) -> CoreResult<u8, SequentialReadError> {
+        self.next().ok_or(SequentialReadError)?
+    }
 }
 
 impl<T> sealed::Sealed for T where T: SequentialRead {}
