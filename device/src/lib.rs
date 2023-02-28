@@ -127,27 +127,4 @@ macro_rules! include_postcard_infomem {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use postcard::{to_allocvec, from_bytes};
-    use postcard_infomem::{InfoMem, to_allocvec_magic, from_seq_magic};
-
-    extern crate std;
-    use std::vec::Vec;
-
-    #[test]
-    fn test_range_sequential_read_slice_equiv() {
-        let im_ser = to_allocvec_magic(&InfoMem::<&[u8]>::default()).unwrap().leak();
-        let seq_reader = (im_ser.as_ptr() as usize..im_ser.as_ptr() as usize + im_ser.len()).into_iter().map(|addr| {
-            // Safety- We just created the vec and leaked it to make it 'static!
-            unsafe { *(addr as *const u8) }
-        });
-
-        let collected_range: Vec<u8> = seq_reader.collect::<Vec<u8>>();
-        assert_eq!(im_ser, collected_range);
-    }
-
-    #[test]
-    fn test_deser_user_payload_deferred() {
-        todo!()
-    }
 }

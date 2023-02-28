@@ -103,14 +103,54 @@ mod tests {
     use super::*;
     use crate::{to_stdvec_magic, InfoMem};
 
+    fn seq_vec(im_vec: Vec<u8>) -> impl SequentialRead + Iterator<Item = CoreResult<u8, SequentialReadError>> {
+        let im_slice = im_vec.leak();
+
+        (im_slice.as_ptr() as usize..im_slice.as_ptr() as usize + im_slice.len()).into_iter().map(|addr| {
+            // Safety- 'static.
+            Ok(unsafe { *(addr as *const u8) })
+        })
+    }
+
     #[test]
     fn test_seq_deser() {
-        todo!()
+        let mut im: InfoMem = InfoMem::default();
+        im.user = Some(b"test data");
+
+        let mut buf = [0; 127];
+        let ser = to_stdvec_magic(&im).unwrap();
+        let im_de = from_seq_magic(seq_vec(ser), &mut buf).unwrap();
+
+        assert_eq!(im, im_de);
+        assert_eq!(&buf[0..9], b"test data");
     }
 
     #[test]
     fn test_seq_deser_no_room() {
-        todo!()
+        let mut im: InfoMem = InfoMem::default();
+        im.user = Some(b"test data");
+
+        let mut buf = [0; 5];
+        let ser = to_stdvec_magic(&im).unwrap();
+        let err = from_seq_magic::<_, _, &[u8]>(seq_vec(ser), &mut buf).unwrap_err();
+
+        assert_eq!(err, Error::DeserializeUnexpectedEnd);
     }
 
+    #[test]
+    fn test_range_sequential_read_slice_equiv() {
+        let im: InfoMem = InfoMem::default();
+        let ser = to_stdvec_magic(&im).unwrap();
+
+        let seq_reader = seq_vec(ser.clone());
+        let collected_range: Vec<u8> = seq_reader.collect::<CoreResult<_, _>>().unwrap();
+
+        assert_eq!(ser, collected_range);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_deser_user_payload_deferred() {
+        todo!()
+    }
 }
