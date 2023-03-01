@@ -12,11 +12,9 @@ use serde::{self, Deserialize};
 #[derive(Debug, Clone, Copy)]
 pub struct SequentialReadError;
 
-/* FIXME: Not correct; the Range should start at "the position the deserializer
-is at before we started deserializing. For deserializing via postcard, deriving
-Deserialize for Range<usize> will deserialize two varints." */
 #[derive(Debug, Clone, Deserialize)]
-pub(super) struct Deferred(pub Range<usize>);
+#[repr(transparent)]
+pub struct Deferred(usize);
 
 pub struct Seq<R, S> {
     src: R,
@@ -35,8 +33,8 @@ where
     iter::Map<Range<Idx>, F>: Iterator<Item = CoreResult<u8, SequentialReadError>>,
     F: FnMut(Idx) -> CoreResult<u8, SequentialReadError> + 'buf
 {
-    type Remainder = &'buf [u8];
-    type Source = &'buf [u8];
+    type Remainder = iter::Map<Range<Idx>, F>;
+    type Source = iter::Map<Range<Idx>, F>;
 
     fn pop(&mut self) -> postcard::Result<u8> {
         self.src
@@ -71,8 +69,31 @@ where
     }
 
     fn finalize(self) -> postcard::Result<Self::Remainder> {
-        Ok(self.buf)
+        Ok(self.src)
     }
+}
+
+fn take_from_seq_magic<'buf, Idx, F, R, S, T>(src: R, buf: S) -> Result<(InfoMem<'buf, T>, iter::Map<Range<Idx>, F>)>
+where
+    Seq<R, S>: Flavor<'buf, Remainder = std::iter::Map<std::ops::Range<Idx>, F>>,
+    T: sealed::Sealed + Deserialize<'buf>,
+    F: FnMut(Idx) -> CoreResult<u8, SequentialReadError> + 'buf
+{
+    let seq = Seq::new(src, buf);
+    let magic = de::Magic::try_new(seq)?;
+    let mut de_magic = Deserializer::from_flavor(magic);
+    let im = InfoMem::deserialize(&mut de_magic)?;
+    let rest = de_magic.finalize()?;
+
+    Ok((im, rest))
+}
+
+pub fn from_seq_magic_deferred<'buf, Idx, F, R, S>(src: R, buf: S) -> Result<(InfoMem<'buf, Deferred>, iter::Map<Range<Idx>, F>)>
+where
+    Seq<R, S>: Flavor<'buf, Remainder = std::iter::Map<std::ops::Range<Idx>, F>>,
+    F: FnMut(Idx) -> CoreResult<u8, SequentialReadError> + 'buf
+{
+    take_from_seq_magic(src, buf)
 }
 
 pub fn from_seq_magic<'buf, R, S, T>(src: R, buf: S) -> Result<InfoMem<'buf, T>>
@@ -100,11 +121,11 @@ where
 mod tests {
     use super::*;
     use crate::{to_stdvec_magic, InfoMem};
-    use core::ptr::addr_of;
+    use postcard::to_stdvec;
 
     fn seq_vec(
         im_vec: Vec<u8>,
-    ) -> iter::Map<Range<usize>, impl FnMut(usize) -> CoreResult<u8, SequentialReadError>> {
+    ) -> iter::Map<Range<usize>, impl FnMut(usize) -> CoreResult<u8, SequentialReadError> + Clone> {
         let im_slice = im_vec.leak();
 
         (im_slice.as_ptr() as usize..im_slice.as_ptr() as usize + im_slice.len())
@@ -152,41 +173,38 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    #[allow(unreachable_code)]
     fn test_deser_user_payload_deferred() {
-        unimplemented!();
-
         let mut im: InfoMem = InfoMem::default();
+        im.app.name = Some(InfoStr::Borrowed("test_deser_user_payload_deferred"));
         im.user = Some(b"test data");
 
-        let mut buf = [0; 127];
+        let mut buf = [0; 64];
         let ser = to_stdvec_magic(&im).unwrap();
-        let ser_addr = addr_of!(ser) as usize;
-        
-        // FIXME: Not correct... we need a Deferred(Range<usize>) struct
-        // which contains information on which address a Seq<> deserialization
-        // is at. A naive deserialization of b"test data" into a range gives a range
-        // of 9..116, i.e. the length of the slice and the first byte of the slice.
-        //
-        // Unfortunately, the Deserializer trait doesn't provide a way 
-        // (even unsafe!) to get this information so that I could it away
-        // into a Deferred(Range<usize>).
-        let im_de: InfoMem<Deferred> = from_seq_magic(seq_vec(ser), &mut buf).unwrap();
-        
+
+        let (im_de, rest) = from_seq_magic_deferred(seq_vec(ser), &mut buf).unwrap();
         assert!(im_de.user.is_some());
-
-        println!("{:?}", im_de.user.clone().unwrap());
-
-        let user_seq = im_de.user.unwrap().0.map(|addr| {
-            // Safety- 'static/derived from leaked vector.
-            Ok(unsafe { *((ser_addr + addr) as *const u8) })
-        });
-
-        assert_eq!(buf, [0; 127]);
+        assert_eq!(&buf[0..32], b"test_deser_user_payload_deferred");
         
-        let user_data: &[u8] = from_seq(user_seq, &mut buf).unwrap();
+        let user_data = rest.collect::<CoreResult<Vec<u8>, SequentialReadError>>().unwrap();
         assert_eq!(user_data, b"test data");
-        assert_eq!(&buf[0..9], b"test data");
+    }
+
+    #[test]
+    fn test_deser_user_payload_serialized_deferred() {
+        let mut im: InfoMem<Vec<u8>> = InfoMem::default();
+        im.app.name = Some(InfoStr::Borrowed("test_deser_user_payload_deferred"));
+        im.user = Some(to_stdvec(&(0xff, b"test data".as_ref())).unwrap());
+
+        let mut buf = [0; 64];
+        let mut user_buf = [0; 64];
+        let ser = to_stdvec_magic(&im).unwrap();
+
+        let (im_de, rest) = from_seq_magic_deferred(seq_vec(ser), &mut buf).unwrap();
+        assert!(im_de.user.is_some());
+        assert_eq!(&buf[0..32], b"test_deser_user_payload_deferred");
+
+        let user_data: (_, &[u8]) = from_seq(rest, &mut user_buf).unwrap();
+        assert_eq!(user_data, (0xff, b"test data".as_ref()));
+        assert_eq!(&user_buf[0..9], b"test data");
     }
 }
