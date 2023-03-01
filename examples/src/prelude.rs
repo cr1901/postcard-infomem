@@ -9,7 +9,7 @@ pub use core::ops;
 pub use postcard::de_flavors::Flavor;
 #[allow(unused_imports)]
 pub use postcard_infomem::{
-    de::Seq, from_bytes_magic, from_seq_magic, InfoMem, SequentialRead, SequentialReadError,
+    de::Seq, from_bytes_magic, from_seq_magic, InfoMem, SequentialReadError,
 };
 pub use postcard_infomem_device::*;
 

@@ -25,7 +25,7 @@ mod magic;
 pub use magic::*;
 
 mod seq;
-pub use seq::{from_seq, from_seq_magic, SequentialRead, SequentialReadError};
+pub use seq::{from_seq, from_seq_magic, SequentialReadError};
 
 mod shim;
 pub use shim::*;
@@ -97,6 +97,9 @@ pub(crate) mod sealed {
     impl Sealed for &mut [u8] {}
     #[cfg(feature = "alloc")]
     impl Sealed for Vec<u8> {}
+
+    // Deferred processing of user-payload.
+    impl Sealed for super::seq::Deferred {}
 }
 
 impl<'a, T> Default for InfoMem<'a, T>

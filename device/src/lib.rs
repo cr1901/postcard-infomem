@@ -109,11 +109,20 @@ macro_rules! include_postcard_infomem {
             the `INFOMEM` `struct`."]
             #[cfg(not(target_arch = "avr"))]
             pub fn get() -> &'static [u8] {
-                &INFOMEM[..]
+                get_slice()
             }
 
             #[cfg(target_arch = "avr")]
             pub fn get() -> core::ops::Range<usize> {
+                get_range()
+            }
+
+            #[cfg(not(target_arch = "avr"))]
+            pub fn get_slice() -> &'static [u8] {
+                &INFOMEM[..]
+            }
+
+            pub fn get_range() -> core::ops::Range<usize> {
                 core::ops::Range {
                     start: INFOMEM.as_ptr() as usize,
                     end: INFOMEM.as_ptr() as usize + INFOMEM.len(),
