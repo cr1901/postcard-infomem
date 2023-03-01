@@ -1,5 +1,3 @@
-use core::iter;
-use core::ops::Range;
 use core::result::Result as CoreResult;
 
 use super::*;
@@ -27,14 +25,12 @@ impl<R, S> Seq<R, S> {
     }
 }
 
-impl<'buf, Idx, F> Flavor<'buf> for Seq<iter::Map<Range<Idx>, F>, &'buf mut [u8]>
+impl<'buf, R> Flavor<'buf> for Seq<R, &'buf mut [u8]>
 where
-    Idx: 'buf,
-    iter::Map<Range<Idx>, F>: Iterator<Item = CoreResult<u8, SequentialReadError>>,
-    F: FnMut(Idx) -> CoreResult<u8, SequentialReadError> + 'buf
+    R: Iterator<Item = CoreResult<u8, SequentialReadError>> + 'buf,
 {
-    type Remainder = iter::Map<Range<Idx>, F>;
-    type Source = iter::Map<Range<Idx>, F>;
+    type Remainder = R;
+    type Source = R;
 
     fn pop(&mut self) -> postcard::Result<u8> {
         self.src
@@ -73,11 +69,9 @@ where
     }
 }
 
-fn take_from_seq_magic<'buf, Idx, F, R, S, T>(src: R, buf: S) -> Result<(InfoMem<'buf, T>, iter::Map<Range<Idx>, F>)>
+pub fn from_seq_magic_deferred<'buf, R, S>(src: R, buf: S) -> Result<(InfoMem<'buf, Deferred>, <Seq<R,S> as Flavor<'buf>>::Remainder)>
 where
-    Seq<R, S>: Flavor<'buf, Remainder = std::iter::Map<std::ops::Range<Idx>, F>>,
-    T: sealed::Sealed + Deserialize<'buf>,
-    F: FnMut(Idx) -> CoreResult<u8, SequentialReadError> + 'buf
+    Seq<R, S>: Flavor<'buf>,
 {
     let seq = Seq::new(src, buf);
     let magic = de::Magic::try_new(seq)?;
@@ -86,14 +80,6 @@ where
     let rest = de_magic.finalize()?;
 
     Ok((im, rest))
-}
-
-pub fn from_seq_magic_deferred<'buf, Idx, F, R, S>(src: R, buf: S) -> Result<(InfoMem<'buf, Deferred>, iter::Map<Range<Idx>, F>)>
-where
-    Seq<R, S>: Flavor<'buf, Remainder = std::iter::Map<std::ops::Range<Idx>, F>>,
-    F: FnMut(Idx) -> CoreResult<u8, SequentialReadError> + 'buf
-{
-    take_from_seq_magic(src, buf)
 }
 
 pub fn from_seq_magic<'buf, R, S, T>(src: R, buf: S) -> Result<InfoMem<'buf, T>>
@@ -105,6 +91,19 @@ where
     let magic = de::Magic::try_new(seq)?;
     let mut de_magic = Deserializer::from_flavor(magic);
     InfoMem::deserialize(&mut de_magic)
+}
+
+pub fn take_from_seq<'buf, R, S, T>(src: R, buf: S) -> Result<(T, <Seq<R,S> as Flavor<'buf>>::Remainder)>
+where
+    Seq<R, S>: Flavor<'buf>,
+    T: Deserialize<'buf>,
+{
+    let seq = Seq::new(src, buf);
+    let mut de_seq = Deserializer::from_flavor(seq);
+    let data = T::deserialize(&mut de_seq)?;
+    let rest = de_seq.finalize()?;
+
+    Ok((data, rest))
 }
 
 pub fn from_seq<'buf, R, S, T>(src: R, buf: S) -> Result<T>
@@ -125,7 +124,7 @@ mod tests {
 
     fn seq_vec(
         im_vec: Vec<u8>,
-    ) -> iter::Map<Range<usize>, impl FnMut(usize) -> CoreResult<u8, SequentialReadError> + Clone> {
+    ) -> impl Iterator<Item = CoreResult<u8, SequentialReadError>> + Clone {
         let im_slice = im_vec.leak();
 
         (im_slice.as_ptr() as usize..im_slice.as_ptr() as usize + im_slice.len())
@@ -202,8 +201,9 @@ mod tests {
         let (im_de, rest) = from_seq_magic_deferred(seq_vec(ser), &mut buf).unwrap();
         assert!(im_de.user.is_some());
         assert_eq!(&buf[0..32], b"test_deser_user_payload_deferred");
+        assert_eq!(&buf[32..], [0; 32]);
 
-        let user_data: (_, &[u8]) = from_seq(rest, &mut user_buf).unwrap();
+        let user_data: (_, _) = from_seq(rest, &mut user_buf).unwrap();
         assert_eq!(user_data, (0xff, b"test data".as_ref()));
         assert_eq!(&user_buf[0..9], b"test data");
     }

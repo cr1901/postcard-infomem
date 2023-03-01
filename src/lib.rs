@@ -25,7 +25,7 @@ mod magic;
 pub use magic::*;
 
 mod seq;
-pub use seq::{from_seq, from_seq_magic, from_seq_magic_deferred, SequentialReadError};
+pub use seq::{from_seq, take_from_seq, from_seq_magic, from_seq_magic_deferred, SequentialReadError};
 
 mod shim;
 pub use shim::*;
