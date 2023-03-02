@@ -97,5 +97,67 @@ cfg_if! {
         pub fn mk_writer() -> impl OurCoreWrite<Error = Infallible> {
             Serial::new()
         }
+    } else if #[cfg(feature = "msp430g2553")] {
+        pub struct Serial {
+            inner: msp430g2553::USCI_A0_UART_MODE,
+        }
+
+        impl Serial {
+            pub fn new(inner: msp430g2553::USCI_A0_UART_MODE) -> Self {
+                inner.uca0ctl1.modify(|_, w| w.ucswrst().set_bit());
+                inner.uca0ctl1.modify(|_, w| w.ucssel().ucssel_2()); // Submain clock for UART (1.1 MHz)
+                inner.uca0ctl0.modify(|_, w| w.ucsync().clear_bit()); // UART mode
+                inner.uca0br0.write(|w| w.bits(110)); // INT(1.1MHz/9600) = 114, but this worked better for me.
+                inner.uca0br1.write(|w| w.bits(0));
+                inner.uca0mctl.modify(|_, w| w.ucbrs().bits(0)); // ROUND(8*(1.1MHz/9600 - INT(1.1MHz/9600))) = 5,
+                                                                 // but this worked better for me.
+                inner.uca0ctl1.modify(|_, w| w.ucswrst().clear_bit());
+        
+                Serial { inner }
+            }
+        }
+
+        impl ehal::serial::Write for Serial {
+            fn write(&mut self, buffer: &[u8]) -> Result<(), Self::Error> {
+                for b in buffer {
+                    while self.inner.uca0stat.read().ucbusy().bit_is_set() {}
+                    self.inner.uca0txbuf.write(|w| w.bits(*b))
+                }
+
+                Ok(())
+            }
+
+            fn flush(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
+        }
+
+        impl ehal::serial::ErrorType for Serial {
+            type Error = Infallible;
+        }
+
+        pub fn mk_writer() -> impl OurCoreWrite<Error = Infallible> {
+            // SAFETY: Single-threaded.
+            let p = unsafe { Peripherals::steal() };
+
+            // Disable watchdog.
+            p.WATCHDOG_TIMER.wdtctl
+                .write(|w| w.wdtpw().password().wdthold().set_bit());
+
+            p.PORT_1_2.p1sel.modify(|_, w| {
+                w.p1()
+                    .set_bit()
+                    .p2()
+                    .set_bit()
+            });
+            p.PORT_1_2.p1sel2.modify(|_, w| {
+                w.p1()
+                    .set_bit()
+                    .p2()
+                    .set_bit()
+            });
+
+            Serial::new(p.USCI_A0_UART_MODE)
+        }
     }
 }

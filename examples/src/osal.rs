@@ -1,6 +1,7 @@
 //! OS abstraction layer for separating OS vs no OS versions of the example.
 
-use super::prelude::{osal::*, *};
+#[allow(unused)]
+use super::prelude::{osal::*, hal::*, *};
 
 cfg_if! {
     if #[cfg(any(target_os = "none", target_os="unknown"))] {

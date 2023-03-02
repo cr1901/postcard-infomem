@@ -42,6 +42,7 @@ pub mod hal {
 
             #[allow(unused)]
             use msp430g2553::interrupt;
+            pub use msp430g2553::Peripherals;
         } else if #[cfg(feature = "rp2040-hal")] {
             extern crate panic_halt;
             pub use rp2040_hal::entry;
