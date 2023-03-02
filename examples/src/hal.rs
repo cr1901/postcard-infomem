@@ -10,27 +10,37 @@ use super::osal::OurCoreWrite;
 
 cfg_if! {
     if #[cfg(target_arch = "avr")] {
+        /* In practice, we should make sure either:
+        1. One thread (probably main) has access to EEPROM.
+        2. If multiple threads (probably main and interrupts) need access, they
+           are using synchronization. One example of synchronization is "all
+           AVR [`Peripherals`](https://docs.rs/avr-device/latest/avr_device/atmega328p/struct.Peripherals.html)
+           wrapped in a [`OnceCell`](https://docs.rs/once_cell/latest/once_cell/unsync/struct.OnceCell.html)
+           wrapped in a [`critical_section::Mutex](https://docs.rs/critical-section/latest/critical_section/struct.Mutex.html)".
+
+        See: https://blog.japaric.io/brave-new-io/
+
+        It's likely not UB/not a data race, but multiple threads interleaving
+        reads/writes is still probably not what you want.
+        */
+        fn read_eeprom(addr: usize) -> Result<u8, SequentialReadError> {
+            while EECR::is_set(EECR::EEPE) {}
+            EEAR::write(addr as u16);
+            EECR::set(EECR::EERE);
+
+            Ok(EEDR::read())
+        }
+
         pub fn mk_iterator<R>(r: R) -> impl Iterator<Item = u8>
         where R: IntoIterator<Item = usize>
         {
-            r.into_iter().map(|addr| {
-                while EECR::is_set(EECR::EEPE) {}
-                EEAR::write(addr as u16);
-                EECR::set(EECR::EERE);
-
-                EEDR::read()
-            })
+            r.into_iter().map_while(|addr| read_eeprom(addr).ok())
         }
 
-        pub fn deserialize_infomem<'buf>(r: Range<usize>, buf: &'buf mut [u8]) -> postcard::Result<InfoMem<'buf>>
+        pub fn deserialize_infomem<'buf, R>(r: R, buf: &'buf mut [u8]) -> postcard::Result<InfoMem<'buf>>
+        where R: Into<Range<usize>>
         {
-            from_seq_magic(r.into_iter().map(|addr| {
-                while EECR::is_set(EECR::EEPE) {}
-                EEAR::write(addr as u16);
-                EECR::set(EECR::EERE);
-
-                Ok(EEDR::read())
-            }), buf)
+            from_seq_magic(r.into().into_iter().map(read_eeprom), buf)
         }
     } else {
         pub fn mk_iterator<R>(r: R) -> impl Iterator<Item = u8>
